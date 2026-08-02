@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PickUp</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- ============ Start / Name ============ -->
+    <section class="screen active" id="screen-start">
+      <div class="card">
+        <h1 class="logo">Pick<span>Up</span></h1>
+        <p class="subtitle">Dreh, halte, kombiniere. 2–4 Spieler, 5 Runden.</p>
+        <label class="field">
+          <span>Dein Name</span>
+          <input type="text" id="nameInput" maxlength="20" placeholder="z.B. Max" autocomplete="off" />
+        </label>
+        <button class="btn primary big" id="toRoomsBtn">Weiter</button>
+        <button class="btn ghost" id="showLeaderboardBtn">🏆 Leaderboard</button>
+      </div>
+    </section>
+
+    <!-- ============ Raumauswahl ============ -->
+    <section class="screen" id="screen-rooms">
+      <div class="card wide">
+        <h2>Raum wählen</h2>
+        <p class="hint">Wähle einen von vier Räumen. Der erste Spieler ist der Host.</p>
+        <div class="rooms-grid" id="roomsGrid"></div>
+        <button class="btn ghost" id="backToStartBtn">Zurück</button>
+      </div>
+    </section>
+
+    <!-- ============ Lobby ============ -->
+    <section class="screen" id="screen-lobby">
+      <div class="card wide">
+        <h2 id="lobbyTitle">Lobby</h2>
+        <p class="hint">Alle müssen bereit sein, dann startet der Host.</p>
+        <ul class="players" id="lobbyPlayers"></ul>
+        <div class="row">
+          <button class="btn" id="readyBtn">Bereit</button>
+          <button class="btn primary" id="startBtn" disabled>Spiel starten</button>
+        </div>
+        <button class="btn ghost" id="leaveLobbyBtn">Raum verlassen</button>
+      </div>
+    </section>
+
+    <!-- ============ Spiel ============ -->
+    <section class="screen" id="screen-game">
+      <div class="game-head">
+        <div class="pill" id="roundPill">Runde 1/5</div>
+        <div class="timer" id="timer">2:00</div>
+        <div class="pill score" id="roundScorePill">0 Pkt</div>
+      </div>
+
+      <div class="reels" id="reels"></div>
+
+      <div class="game-controls">
+        <button class="btn primary big" id="rollBtn">Drehen</button>
+        <div class="rolls" id="rollsInfo">3 Würfe übrig</div>
+      </div>
+
+      <h3 class="card-title">Kombination wählen</h3>
+      <div class="scorecard" id="scorecard"></div>
+
+      <button class="btn danger" id="finishRoundBtn">Runde beenden</button>
+    </section>
+
+    <!-- ============ Warten ============ -->
+    <section class="screen" id="screen-wait">
+      <div class="card">
+        <div class="spinner"></div>
+        <h2>Warte auf die anderen…</h2>
+        <p class="hint">Deine Runde ist abgeschlossen.</p>
+      </div>
+    </section>
+
+    <!-- ============ Zwischenstand ============ -->
+    <section class="screen" id="screen-results">
+      <div class="card wide">
+        <h2 id="resultsTitle">Zwischenstand</h2>
+        <ol class="standings" id="standings"></ol>
+        <button class="btn primary" id="nextRoundBtn">Nächste Runde</button>
+        <p class="hint" id="waitHostHint" hidden>Warte auf den Host…</p>
+      </div>
+    </section>
+
+    <!-- ============ Ende ============ -->
+    <section class="screen" id="screen-final">
+      <div class="card wide">
+        <h2>🏁 Endergebnis</h2>
+        <ol class="standings final" id="finalStandings"></ol>
+        <h3 class="card-title">🏆 Leaderboard</h3>
+        <ol class="leaderboard" id="finalLeaderboard"></ol>
+        <button class="btn primary" id="backLobbyBtn">Zurück zur Lobby</button>
+      </div>
+    </section>
+
+    <!-- ============ Leaderboard-Overlay ============ -->
+    <section class="screen" id="screen-leaderboard">
+      <div class="card wide">
+        <h2>🏆 Leaderboard</h2>
+        <ol class="leaderboard" id="leaderboardList"></ol>
+        <button class="btn ghost" id="closeLeaderboardBtn">Schließen</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

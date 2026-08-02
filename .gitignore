@@ -1,0 +1,11 @@
+# Abhängigkeiten (werden per npm install / deno task neu geladen)
+node_modules/
+
+# Laufzeitdaten – Leaderboard-Scores sollen nicht ins Repo
+data/leaderboard.json
+
+# Logs / Editor / OS
+*.log
+.DS_Store
+.idea/
+.vscode/

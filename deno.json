@@ -1,0 +1,6 @@
+{
+  "tasks": {
+    "start": "deno run -A --node-modules-dir=auto server/index.js"
+  },
+  "nodeModulesDir": "auto"
+}
