@@ -131,7 +131,10 @@ input[type=text]:focus { border-color: var(--primary); }
   background: var(--panel2); border: 1px solid var(--line);
   padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 14px;
 }
-.pill.score { color: var(--gold); }
+.pill.score { color: var(--gold); font-variant-numeric: tabular-nums; }
+.pill.mult { color: var(--green); transition: transform .15s; }
+.pill.mult.hot { color: #ff8a3c; }
+.pill.mult.bump { transform: scale(1.35); }
 /* Timer als Balken */
 .timerbar {
   height: 14px; background: var(--bg2); border: 1px solid var(--line);
@@ -182,7 +185,13 @@ input[type=text]:focus { border-color: var(--primary); }
 }
 .cat .cat-name { display: flex; align-items: center; gap: 7px; font-size: 14px; }
 .cat .cat-name svg { width: 18px; height: 18px; }
-.cat .cat-pts { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cat .cat-pts { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; }
+
+/* Muster-Anzeige (qqq+kk usw.) */
+.pat { display: inline-flex; align-items: center; gap: 3px; }
+.pat-ic { width: 17px; height: 17px; display: inline-flex; }
+.pat-ic svg { width: 100%; height: 100%; }
+.pat-plus { color: var(--muted); font-weight: 800; margin: 0 2px; font-size: 15px; }
 .cat.available { border-color: var(--green); }
 .cat.available .cat-pts { color: var(--green); }
 .cat.zero .cat-pts { color: var(--muted); }
@@ -197,6 +206,27 @@ input[type=text]:focus { border-color: var(--primary); }
   animation: rot 1s linear infinite;
 }
 @keyframes rot { to { transform: rotate(360deg); } }
+
+/* Jackpot-/Erfolgs-Overlay */
+.celebrate {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 60; opacity: 0;
+}
+.celebrate.show { animation: celebrate 1.1s ease forwards; }
+.celebrate .burst {
+  font-size: clamp(28px, 9vw, 64px); font-weight: 900; text-align: center;
+  background: linear-gradient(90deg, var(--gold), #ff8a3c, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: 0 4px 30px rgba(245,197,66,.4); padding: 0 16px;
+}
+@keyframes celebrate {
+  0% { opacity: 0; transform: scale(.5); }
+  25% { opacity: 1; transform: scale(1.1); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+.flash { animation: flashbg .5s ease; }
+@keyframes flashbg { 0%,100% { background-color: transparent; } 40% { background-color: rgba(245,197,66,.12); } }
 
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);

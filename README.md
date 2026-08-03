@@ -7,8 +7,10 @@ Ein privates Slot-Kombinations-Spiel für 2–4 Freunde. Inspiriert vom Prinzip
 
 - **2–4 Spieler** treffen sich in einem von **4 Räumen**. Der erste Spieler ist **Host**.
 - Sind alle **bereit**, startet der Host das Spiel: **5 Runden**.
-- Jede Runde läuft auf **Zeit** (Standard 2 Min). Ziel: möglichst viele der **12 Kombinationen** füllen.
-- Pro Zug: **3× drehen** mit Halten dazwischen, dann eine Kombination der Wertungstafel zuweisen.
+- Die Runden werden **immer kürzer** (90 → 70 → 50 → 35 → 25 s): von entspannt zu stressig.
+- Pro Zug dreht sich die Walze **automatisch**, danach zwei **Draws** (1. Draw / 2. Draw) mit Halten dazwischen.
+- Dann eine **gültige** Kombination wählen. Gibt es nach dem letzten Draw **keine** gültige Kombination mehr, ist die Runde vorbei (**Fehlwurf**) – man wartet auf den anderen.
+- Für die nächste Runde müssen **beide erneut „Bereit"** drücken.
 - Nach jeder Runde: synchroner **Zwischenstand**. Am Ende: **Endergebnis + Leaderboard**.
 
 Jeder spielt seine Walzen **lokal** – synchronisiert wird nur Rundenstart und die
@@ -16,21 +18,28 @@ Punkte-Übergabe ins Scoreboard (kein Echtzeit-Streaming der Walzen).
 
 ### Kombinationen & Scoring
 
-Symbole (Wert): Kleeblatt 1 · Hufeisen 2 · Halbmond 3 · Stern 4 · Krone 5 · **Herz 6**.
-Der Symbolwert kommt zum Grundwert der Kombination dazu – Herz-Kombis geben also mehr.
+Glücksspiel-Stil: **große Zahlen, weite Streuung, Bonus für Extra-Symbole**.
+Symbolwerte (Tier): Kleeblatt 1 · Hufeisen 2 · Halbmond 3 · Stern 5 · Krone 8 · **Herz 12**.
+Die Kombinationen werden auf der Tafel als **Muster** gezeigt (z. B. Full House = `▢▢▢ + ●●`,
+„3× Symbol" = das Symbol dreimal).
 
-| Kombination        | Grundwert | Formel (Punkte)                          |
-|--------------------|-----------|------------------------------------------|
-| 3× \<Symbol\>      | 20        | 20 + Anzahl × Symbolwert                 |
-| Zweierpaar         | 10        | 10 + 2 × Symbolwert                       |
-| Full House (3+2)   | 40        | 40 + 3×Wert(Triple) + 2×Wert(Paar)       |
-| 5 Verschiedene     | 30        | 30 + Summe aller 5 Symbolwerte           |
-| Vierling (4 gl.)   | 60        | 60 + 4 × Symbolwert                       |
-| Fünfling (5 gl.)   | 100       | 100 + 5 × Symbolwert                      |
-| Joker              | 25        | immer wertbar: 25 + höchster Walzenwert   |
+| Kombination      | Punkte-Formel                              | Beispiel            |
+|------------------|--------------------------------------------|---------------------|
+| 3× \<Symbol\>    | 1.000 × Wert × (Anzahl − 2)                | 3 Klee = 1.000 · 3 Herz = 12.000 · 4 Herz = 24.000 |
+| Zweierpaar       | 300 × Wert                                 | Paar Herz = 3.600   |
+| Full House (3+2) | 5.000 × Wert(Drilling) + 1.500 × Wert(Paar)| Herz+Krone = 72.000 |
+| 5 Verschiedene   | 15.000 + 1.000 × Summe der Werte           | ≈ 45.000            |
+| Vierling (4 gl.) | 20.000 × Wert × (Anzahl − 3)               | 4 Herz = 240.000    |
+| Fünfling (5 gl.) | 60.000 × Wert                              | 5 Herz = 720.000    |
+| Joker            | 4.000 × Summe (nur mit mind. einem Paar)   | ≈ 150.000           |
 
-Alle Werte stehen in **`public/game-core.js`** (Objekte `BASE`, `SYMBOLS`) – einfach anpassbar.
-Rundenzahl/-dauer in **`server/index.js`** (`CONFIG`).
+**Serien-Multiplikator:** Jede gewertete Kombination in Folge erhöht den Multiplikator
+(×1 → ×1,2 → ×1,5 → ×2 → ×3 → ×4 → ×5), der auf jede weitere Kombination wirkt – dazu
+Jackpot-Effekte bei großen Treffern. Ein Fehlwurf beendet die Runde und setzt die Serie zurück.
+Mehr Symbole als nötig (z. B. 4 Hufeisen in „3× Hufeisen") geben **mehr** Punkte.
+
+Alle Werte stehen in **`public/game-core.js`** (`BASE`, `SYMBOLS`) und die Multiplikator-Stufen
+in **`public/app.js`** (`multiplierFor`). Rundenzahl/-zeiten in **`server/index.js`** (`CONFIG`).
 
 ## Lokal starten
 

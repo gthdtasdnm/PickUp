@@ -7,3 +7,17 @@ export const SYMBOL_SVG = {
   kleeblatt: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="7.5" r="3.4"/><circle cx="7.8" cy="11.7" r="3.4"/><circle cx="16.2" cy="11.7" r="3.4"/><path d="M11 12h2l-.4 9h-1.2z"/></svg>`,
   hufeisen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6.5 20.5V12a5.5 6.5 0 0 1 11 0v8.5"/></svg>`,
 };
+
+// Neutrale Formen für die Muster-Anzeige der Kombinationen.
+export const SHAPE_SVG = {
+  q: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>`,
+  k: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+  t: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l9 18H3z"/></svg>`,
+  d: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l10 10-10 10L2 12z"/></svg>`,
+  p: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l9.5 6.9-3.6 11.1H6.1L2.5 8.9z"/></svg>`,
+  joker: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.9 7.1.6-5.4 4.7 1.7 7L12 17.9 5.7 21.2l1.7-7L2 9.5l7.1-.6z"/></svg>`,
+};
+
+export const SHAPE_COLOR = {
+  q: '#6c8cff', k: '#ff5d6c', t: '#3ec46d', d: '#f5c542', p: '#b57bff', joker: '#f5c542',
+};

@@ -17,12 +17,15 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // -------------------- Spiel-Konfiguration --------------------
 const CONFIG = {
-  rounds: 5,             // Anzahl Runden pro Spiel
-  roundDuration: 120,    // Sekunden pro Runde
+  rounds: 5,                              // Anzahl Runden pro Spiel
+  roundDurations: [90, 70, 50, 35, 25],   // Sekunden je Runde: entspannt -> stressig
   maxPlayers: 4,
   minPlayers: 2,
-  graceSeconds: 20,      // Puffer bevor der Server eine Runde zwangsweise abschliesst
+  graceSeconds: 20,                       // Puffer bevor der Server eine Runde zwangsweise abschliesst
 };
+function durationFor(round) {
+  return CONFIG.roundDurations[round - 1] ?? CONFIG.roundDurations[CONFIG.roundDurations.length - 1];
+}
 
 const ROOM_IDS = ['1', '2', '3', '4'];
 const rooms = {};
@@ -115,11 +118,12 @@ function startRound(room) {
   room.status = 'playing';
   room.roundScores = new Map();
   room.submitted = new Set();
+  const duration = durationFor(room.round);
 
   io.to(room.id).emit('roundStart', {
     round: room.round,
     totalRounds: CONFIG.rounds,
-    duration: CONFIG.roundDuration,
+    duration,
   });
   emitRoomState(room);
   broadcastRooms();
@@ -127,7 +131,7 @@ function startRound(room) {
   if (room.timer) clearTimeout(room.timer);
   room.timer = setTimeout(() => {
     endRound(room);
-  }, (CONFIG.roundDuration + CONFIG.graceSeconds) * 1000);
+  }, (duration + CONFIG.graceSeconds) * 1000);
 }
 
 function endRound(room) {

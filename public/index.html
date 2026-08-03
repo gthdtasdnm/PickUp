@@ -50,7 +50,8 @@
     <section class="screen" id="screen-game">
       <div class="game-head">
         <div class="pill" id="roundPill">Runde 1/5</div>
-        <div class="pill score" id="roundScorePill">0 Pkt</div>
+        <div class="pill mult" id="multPill">×1</div>
+        <div class="pill score" id="roundScorePill">0</div>
       </div>
       <div class="timerbar"><div class="timerbar-fill" id="timerFill"></div></div>
 
@@ -60,12 +61,10 @@
         <button class="btn draw" id="draw1">1. Draw</button>
         <button class="btn draw" id="draw2">2. Draw</button>
       </div>
-      <div class="draw-hint">Symbole antippen zum Halten</div>
+      <div class="draw-hint">Symbole antippen zum Halten · gültige Kombination wählen</div>
 
       <h3 class="card-title">Kombination wählen</h3>
       <div class="scorecard" id="scorecard"></div>
-
-      <button class="btn danger" id="finishRoundBtn">Runde beenden</button>
     </section>
 
     <!-- ============ Warten ============ -->
@@ -109,6 +108,7 @@
     </section>
   </div>
 
+  <div id="celebrate" class="celebrate"></div>
   <div id="toast" class="toast"></div>
 
   <script src="/socket.io/socket.io.js"></script>
