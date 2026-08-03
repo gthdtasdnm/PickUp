@@ -100,6 +100,14 @@ function resetRoomToLobby(room) {
   room.roundScores = new Map();
   room.submitted = new Set();
   for (const p of room.players.values()) p.ready = false;
+  // Host neu bestimmen: erster verbleibender Spieler, sonst keiner.
+  // (Fix: alter Host-ID blieb frueher stehen -> kein Host nach Neubeitritt.)
+  room.hostId = room.players.size ? room.players.keys().next().value : null;
+}
+
+function allReady(room) {
+  return room.players.size >= CONFIG.minPlayers
+    && [...room.players.values()].every((p) => p.ready);
 }
 
 function startRound(room) {
@@ -133,6 +141,8 @@ function endRound(room) {
 
   const isLast = room.round >= CONFIG.rounds;
   room.status = isLast ? 'finished' : 'results';
+  // Fuer die naechste Runde muessen alle erneut "Bereit" druecken.
+  if (!isLast) for (const p of room.players.values()) p.ready = false;
 
   io.to(room.id).emit('roundResults', {
     round: room.round,
@@ -186,11 +196,15 @@ io.on('connection', (socket) => {
 
   socket.on('toggleReady', () => {
     const room = rooms[socket.data.roomId];
-    if (!room || room.status !== 'lobby') return;
+    if (!room) return;
+    // "Bereit" gilt in der Lobby UND zwischen den Runden (Ergebnis-Screen).
+    if (room.status !== 'lobby' && room.status !== 'results') return;
     const p = room.players.get(socket.id);
     if (!p) return;
     p.ready = !p.ready;
     emitRoomState(room);
+    // Zwischen den Runden: sobald alle bereit sind -> naechste Runde automatisch.
+    if (room.status === 'results' && allReady(room)) startRound(room);
   });
 
   socket.on('startGame', () => {
@@ -216,13 +230,6 @@ io.on('connection', (socket) => {
     room.totals.set(socket.id, (room.totals.get(socket.id) || 0) + s);
     room.submitted.add(socket.id);
     maybeFinishRound(room);
-  });
-
-  socket.on('nextRound', () => {
-    const room = rooms[socket.data.roomId];
-    if (!room || room.hostId !== socket.id) return;
-    if (room.status !== 'results') return;
-    startRound(room);
   });
 
   socket.on('backToLobby', () => {

@@ -132,9 +132,21 @@ input[type=text]:focus { border-color: var(--primary); }
   padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 14px;
 }
 .pill.score { color: var(--gold); }
-.timer { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.timer.low { color: var(--red); animation: pulse .6s infinite alternate; }
-@keyframes pulse { to { transform: scale(1.08); } }
+/* Timer als Balken */
+.timerbar {
+  height: 14px; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 999px; overflow: hidden; margin: 0 0 16px;
+}
+.timerbar-fill {
+  height: 100%; width: 100%;
+  background: linear-gradient(90deg, var(--green), var(--primary));
+  transition: width .2s linear;
+}
+.timerbar-fill.low {
+  background: linear-gradient(90deg, #ff8a3c, var(--red));
+  animation: barpulse .6s infinite alternate;
+}
+@keyframes barpulse { to { opacity: .6; } }
 
 /* -------- Reels -------- */
 .reels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 8px 0 14px; }
@@ -154,8 +166,12 @@ input[type=text]:focus { border-color: var(--primary); }
 .reel.spin svg { animation: spin .4s ease; }
 @keyframes spin { 0% { transform: translateY(-120%); opacity: 0; } 100% { transform: none; opacity: 1; } }
 
-.game-controls { text-align: center; margin-bottom: 8px; }
-.rolls { color: var(--muted); font-size: 14px; margin-top: 8px; }
+/* Draw-Buttons */
+.draws { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.btn.draw { margin-top: 0; }
+.btn.draw.used { background: var(--bg2); color: var(--muted); opacity: .45; }
+.btn.draw:disabled { opacity: .4; cursor: not-allowed; }
+.draw-hint { text-align: center; color: var(--muted); font-size: 13px; margin: 10px 0 2px; }
 
 /* -------- Scorecard -------- */
 .scorecard { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
