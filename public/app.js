@@ -1,7 +1,10 @@
 import { SYMBOL_BY_ID, CATEGORIES, scoreCategory, randomSymbol } from './game-core.js';
 import { SYMBOL_SVG, SHAPE_SVG, SHAPE_COLOR } from './symbols.js';
 
-const socket = io();
+// Basis-Pfad der Seite: "/" lokal, "/pickup/" hinter dem Apache-Reverse-Proxy.
+// So funktioniert Socket.IO ohne feste Pfad-Annahme in beiden Fällen.
+const BASE = location.pathname.replace(/[^/]*$/, '');
+const socket = io({ path: BASE + 'socket.io' });
 let myId = null;
 const fmt = (n) => Math.round(n).toLocaleString('de-DE');
 
