@@ -117,10 +117,11 @@ input[type=text]:focus { border-color: var(--primary); }
 .standings li:first-child { border-color: var(--gold); }
 
 .leaderboard li {
-  display: flex; justify-content: space-between; padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
+  display: grid; grid-template-columns: 1fr 92px 104px; align-items: center;
+  gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line);
 }
-.leaderboard li .lb-date { color: var(--muted); font-size: 12px; margin: 0 10px; }
+.leaderboard li .lb-date { color: var(--muted); font-size: 12px; text-align: center; }
+.leaderboard li .pts { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* -------- Game head -------- */
 .game-head {
