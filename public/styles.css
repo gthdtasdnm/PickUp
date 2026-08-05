@@ -298,19 +298,45 @@ h2 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
 }
 #toast.show { opacity: 1; }
 
+/* -------- Spielfeld-Layout --------
+   Der Spiel-Screen ist eine Column-Flexbox mit align-items:center. Ohne
+   eigene Breite werden die Kinder darin auf ihre Inhaltsbreite geschrumpft
+   (Timerbalken -> ein Strich) oder auf die volle Fensterbreite gezogen
+   (Walzen -> halber Bildschirm). Also: feste Brettbreite fuer alle Kinder.
+
+   --reel-h haengt an der Fensterhoehe, damit Walzen UND Kombi-Liste
+   zusammen auf den Schirm passen - das ist der Sinn des Screens. */
+#screen-game { --reel-h: clamp(70px, 19dvh, 150px); --board: 560px; }
+#screen-game.active {
+  /* Die Elemente bringen ihre eigenen Abstaende mit, der 20px-Screen-Gap
+     kaeme oben drauf und kostet ueber sechs Kinder gut 120px Hoehe. */
+  gap: 0;
+  justify-content: flex-start;
+  padding-block: clamp(10px, 2.2vh, 22px);
+}
+#screen-game > * { width: 100%; max-width: var(--board); }
+/* Aus der Walzenhoehe zurueckgerechnet: 5 Kacheln im Verhaeltnis 3:4 plus
+   4 Luecken. So bleibt die Kachel quadratisch-hoch statt verzerrt. */
+#screen-game > .reels { max-width: min(var(--board), calc(var(--reel-h) * .75 * 5 + 32px)); }
+#screen-game .card-title { font-size: 15px; margin: 12px 0 8px; }
+
 /* -------- Game head -------- */
 .game-head {
   display: flex; align-items: center; justify-content: space-between;
-  margin: 6px 0 18px;
+  gap: 10px; margin: 6px 0 14px;
 }
 .pill {
   background: var(--panel2); border: 1px solid var(--line);
   padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 14px;
 }
 .pill.score { color: var(--gold); font-variant-numeric: tabular-nums; }
-.pill.mult { color: var(--green); transition: transform .15s; }
+.pill.mult { color: var(--green); }
 .pill.mult.hot { color: #ff8a3c; }
-.pill.mult.bump { transform: scale(1.35); }
+/* Als Animation, nicht als bleibender transform: die Klasse setzt app.js nur
+   einmal und nimmt sie nie wieder weg - der Pill blieb sonst dauerhaft um
+   35% aufgeblasen und schob sich ueber den Runden-Pill. */
+.pill.mult.bump { animation: pillbump .3s ease; }
+@keyframes pillbump { 50% { transform: scale(1.35); } }
 /* Timer als Balken */
 .timerbar {
   height: 14px; background: var(--bg2); border: 1px solid var(--line);
@@ -353,7 +379,10 @@ h2 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
 .draw-hint { text-align: center; color: var(--muted); font-size: 13px; margin: 10px 0 2px; }
 
 /* -------- Scorecard -------- */
-.scorecard { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* auto-fit statt fester Spaltenzahl: 12 Kombinationen einspaltig sind auf
+   dem Handy dreimal so hoch wie der Schirm. So legt die Breite die Spalten
+   fest - zwei auf dem Handy, drei auf dem Spielbrett am Rechner. */
+.scorecard { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .cat {
   display: flex; align-items: center; justify-content: space-between;
   background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
@@ -412,6 +441,11 @@ h2 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
 .toast.show { opacity: .95; transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 420px) {
-  .scorecard { grid-template-columns: 1fr; }
+  /* Zwei Spalten bleiben - dafuer werden die Kacheln schmaler gebaut,
+     damit Muster und Punktzahl nebeneinander Platz haben. */
+  .cat { padding: 8px 10px; }
+  .cat .cat-pts { font-size: 12px; }
+  .pat-ic { width: 14px; height: 14px; }
+  .pat { gap: 2px; }
   .logo { font-size: 44px; }
 }
