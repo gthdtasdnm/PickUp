@@ -149,6 +149,16 @@ function allReady(room) {
     && [...room.players.values()].every((p) => p.ready);
 }
 
+/**
+ * In der Lobby hat der Host keinen "Bereit"-Knopf – er drueckt "Spiel starten".
+ * Also zaehlt er dort automatisch als bereit, sonst kaeme das Spiel nie los.
+ * (Zwischen den Runden gibt es fuer alle einen Bereit-Knopf -> allReady.)
+ */
+function lobbyReady(room) {
+  return room.players.size >= CONFIG.minPlayers
+    && [...room.players.values()].every((p) => p.ready || p.id === room.hostId);
+}
+
 function startRound(room) {
   room.round += 1;
   room.status = 'playing';
@@ -271,8 +281,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.roomId);
     if (!room || room.hostId !== socket.id) return;
     if (room.status !== 'lobby') return;
-    if (room.players.size < CONFIG.minPlayers) return;
-    if (![...room.players.values()].every((p) => p.ready)) return;
+    if (!lobbyReady(room)) return;
 
     room.round = 0;
     for (const id of room.players.keys()) room.totals.set(id, 0);

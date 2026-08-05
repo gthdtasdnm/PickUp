@@ -198,7 +198,9 @@ function renderLobby(rs) {
     readyBtn.textContent = me.ready ? '✓ Bereit' : 'Bereit';
     readyBtn.classList.toggle('on', me.ready);
   }
-  const allReady = rs.players.length >= rs.minPlayers && rs.players.every((p) => p.ready);
+  // Der Host hat hier keinen Bereit-Knopf (er startet ja), also zaehlt er als bereit.
+  const allReady = rs.players.length >= rs.minPlayers
+    && rs.players.every((p) => p.ready || p.isHost);
   $('#startBtn').disabled = !(state.isHost && allReady);
   $('#startBtn').style.display = state.isHost ? '' : 'none';
   $('#readyBtn').style.display = state.isHost ? 'none' : '';
