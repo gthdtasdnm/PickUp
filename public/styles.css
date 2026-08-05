@@ -1,119 +1,284 @@
+/* ══════════════ Gemeinsame Lobby-Basis ══════════════ Anfang ═══════════════
+   Identisch in PickUp, Magic Towers, Reflex Royale und Double. Wer hier etwas
+   ändert, ändert es in allen vier – der Block wird von Hand synchron gehalten,
+   es gibt bewusst keinen Build-Schritt.
+
+   --akzent/--akzent2 setzt jedes Spiel darunter selbst; alles andere ist gleich.
+   ────────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --bg: #0e1020;
-  --bg2: #171a33;
-  --panel: #1e2242;
+  --bg: #0a0612;
+  --bg2: #140b23;
+  --panel: rgba(30, 18, 52, .72);
+  --line: rgba(160, 120, 255, .18);
+  --ink: #f2ecff;
+  --muted: #9c8fc2;
+  --hot: #ff2e88;
+  --hot2: #ff8a3d;
+  --cool: #35e6ff;
+  --gold: #ffd447;
+  --good: #52ffa8;
+  --bad: #ff4d5e;
+  --r: 14px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .55);
+
+  /* Voreinstellung, wird je Spiel überschrieben */
+  --akzent: var(--hot);
+  --akzent2: var(--gold);
+}
+
+/* Screens: beide Schaltklassen, damit jedes Spiel seinen bisherigen
+   Umschalter behalten kann (.on in Magic Towers, .active in den anderen). */
+.screen.on, .screen.active, .view.active { display: flex; }
+
+/* ── Typo ─────────────────────────────────────────────────────────────── */
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.center { text-align: center; }
+.spacer { flex: 1; }
+.row { display: flex; align-items: center; }
+.row.gap { gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+.logo {
+  font-size: clamp(38px, 8vw, 76px); font-weight: 900;
+  letter-spacing: -.03em; line-height: .92; text-align: center;
+  background: linear-gradient(100deg, #fff 10%, var(--akzent) 45%, var(--akzent2) 95%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 4px 24px rgba(255, 46, 136, .35));
+}
+.logo span {
+  display: block;
+  background: linear-gradient(100deg, var(--cool), #a06bff);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.logo.sm { font-size: 20px; line-height: 1; }
+.logo.sm span { display: inline; }
+.tag {
+  color: var(--muted); margin-top: 10px; font-size: 15px;
+  letter-spacing: .12em; text-transform: uppercase; text-align: center;
+}
+
+/* ── Panels ───────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+  padding: 24px; backdrop-filter: blur(14px); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 12px; width: 100%;
+}
+.panel.narrow { max-width: 380px; }
+.panel.wide { max-width: 700px; }
+
+/* ── Formulare ────────────────────────────────────────────────────────── */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field span {
+  font-size: 12px; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--muted);
+}
+input, select {
+  background: rgba(0, 0, 0, .35); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 12px; padding: 13px 15px; font-family: inherit; width: 100%;
+  /* 16px ist Pflicht: darunter zoomt iOS Safari beim Fokus in das Feld hinein. */
+  font-size: 16px;
+  transition: border-color .15s, box-shadow .15s;
+}
+input:focus, select:focus {
+  outline: none; border-color: var(--akzent);
+  box-shadow: 0 0 0 3px rgba(255, 46, 136, .18);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.btn {
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--ink);
+  border-radius: 12px; padding: 13px 18px; font-size: 15px; font-weight: 700;
+  font-family: inherit; cursor: pointer; user-select: none;
+  transition: transform .12s, filter .15s, background .15s;
+}
+.btn:hover { background: rgba(255, 255, 255, .12); }
+.btn:active { transform: scale(.96); }
+.btn.big { padding: 16px 26px; font-size: 17px; }
+/* .sm und .small sind dasselbe – die vier Spiele hatten je eine der beiden
+   Schreibweisen, beide bleiben gültig, damit kein Markup umgeschrieben wird. */
+.btn.sm, .btn.small { padding: 8px 12px; font-size: 13px; width: auto; }
+.btn.ghost { background: transparent; }
+.btn.primary {
+  background: linear-gradient(100deg, var(--akzent), var(--akzent2));
+  border-color: transparent; color: #180a12;
+  box-shadow: 0 6px 22px rgba(255, 46, 136, .3);
+}
+.btn.primary:hover { filter: brightness(1.12); }
+.btn.on { background: linear-gradient(100deg, #1ec98a, var(--good)); color: #04220f; border-color: transparent; }
+.btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+
+/* ── Trenner „oder beitreten" ─────────────────────────────────────────── */
+.or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* ── Einstellungszeile: Beschriftung links, Schalter rechts ───────────── */
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.setting-label {
+  font-size: 12px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .12em;
+}
+
+/* ── Sichtbarkeit: Öffentlich | Privat ────────────────────────────────── */
+.segmented {
+  display: flex; gap: 4px; padding: 4px;
+  background: rgba(0, 0, 0, .35); border: 1px solid var(--line); border-radius: 12px;
+}
+.seg {
+  flex: 1; border: 0; background: transparent; color: var(--muted);
+  font: 700 14px/1 inherit; font-family: inherit; padding: 10px 8px;
+  border-radius: 9px; cursor: pointer; transition: background .15s, color .15s;
+}
+.seg.sel { background: rgba(255, 255, 255, .1); color: var(--ink); }
+
+/* ── Raumcode + Teilen ────────────────────────────────────────────────── */
+.codebox {
+  text-align: center; background: var(--panel);
+  border: 2px dashed var(--line); border-radius: var(--r); padding: 16px;
+}
+.codebox-label {
+  display: block; font-size: 11px; letter-spacing: .18em;
+  color: var(--muted); text-transform: uppercase;
+}
+.codebox strong {
+  display: block; font-size: clamp(34px, 11vw, 46px); font-weight: 900;
+  letter-spacing: .22em; color: var(--gold); margin: 4px 0 10px;
+  /* Der Code wird abgetippt und vorgelesen – Ziffern gleich breit. */
+  font-variant-numeric: tabular-nums;
+}
+.codebox-vis { display: block; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.codebox .btn { margin: 0 auto; }
+
+.joinrow { display: flex; gap: 10px; }
+.joinrow input { text-align: center; letter-spacing: .3em; font-weight: 800; }
+.joinrow .btn { width: auto; flex: 0 0 auto; }
+
+/* ── Offene Räume ─────────────────────────────────────────────────────── */
+.rooms-head {
+  font-size: 13px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted);
+}
+.rooms-head span { color: var(--cool); }
+.roomlist { display: flex; flex-direction: column; gap: 8px; }
+.rooms-empty {
+  font-size: 13px; color: var(--muted); line-height: 1.45;
+  padding: 12px 14px; border: 2px dashed var(--line); border-radius: var(--r);
+}
+.roomrow {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center; gap: 10px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 12px 14px;
+  cursor: pointer; text-align: left; color: inherit;
+  font-family: inherit; font-size: 15px;
+  transition: transform .14s, border-color .15s, background .15s;
+}
+.roomrow:hover { transform: translateY(-2px); border-color: var(--akzent); background: rgba(255, 46, 136, .1); }
+.roomrow:active { transform: scale(.98); }
+.roomrow-name { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roomrow-meta { font-size: 12px; color: var(--muted); }
+.roomrow-code { font-weight: 900; letter-spacing: .12em; color: var(--gold); font-variant-numeric: tabular-nums; }
+.roomrow-count { font-weight: 900; color: var(--gold); font-variant-numeric: tabular-nums; }
+
+.pill {
+  font-size: 11px; padding: 3px 9px; border-radius: 99px;
+  background: rgba(255, 255, 255, .1); letter-spacing: .06em;
+  text-transform: uppercase; white-space: nowrap;
+}
+.pill.live { background: rgba(255, 46, 136, .22); color: var(--hot); }
+.pill.open { background: rgba(82, 255, 168, .18); color: var(--good); }
+
+/* ── Warteraum: Sitze ─────────────────────────────────────────────────── */
+/* 110px, nicht 140: bei 360px Displaybreite bleiben nach Screen- und
+   Panel-Polsterung nur ~276px übrig – mit 140px stünden die Sitze
+   untereinander und der Warteraum wäre doppelt so hoch. */
+.seats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin: 8px 0 4px; }
+.seat {
+  border: 1px solid var(--line); border-radius: 16px; padding: 16px 12px;
+  text-align: center; background: rgba(0, 0, 0, .28);
+  transition: border-color .2s, box-shadow .2s;
+}
+.seat.ready { border-color: var(--good); box-shadow: 0 0 0 3px rgba(82, 255, 168, .12); }
+.seat.off { opacity: .45; }
+.seat .av { font-size: 30px; }
+.seat .nm { font-weight: 800; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat .st { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.seat.ready .st { color: var(--good); }
+.seat .host { font-size: 11px; color: var(--gold); letter-spacing: .1em; }
+.seat.empty { border-style: dashed; opacity: .4; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .roomrow, .seat { transition: none; }
+  /* Auch Einblend-Animationen aus: sie starten bei opacity 0, und wer
+     Bewegung abgeschaltet hat, soll den Inhalt sofort sehen – nicht erst
+     nach der Animation. Nebenbei trifft so auch der Layout-Screenshot
+     nicht mehr Frame 0. */
+  .screen, .screen.on { animation: none !important; }
+}
+
+/* ══════════════ Gemeinsame Lobby-Basis ══════════════ Ende ═════════════════ */
+
+/* PickUp: eigener Akzent + Altnamen, die der Spielteil weiterbenutzt. */
+:root {
+  --akzent: var(--hot2);
+  --akzent2: var(--gold);
+  --text: var(--ink);
   --panel2: #262b52;
-  --line: #333a68;
-  --text: #eef1ff;
-  --muted: #9aa0c8;
-  --primary: #6c8cff;
-  --primary2: #8a6cff;
-  --gold: #f5c542;
-  --green: #3ec46d;
-  --red: #ff5d6c;
-  --radius: 16px;
-  --shadow: 0 10px 40px rgba(0,0,0,.45);
+  --primary: var(--hot2);
+  --primary2: var(--gold);
+  --green: var(--good);
+  --red: var(--bad);
+  --radius: var(--r);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
+
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  color: var(--text);
   background:
-    radial-gradient(1200px 600px at 50% -10%, #2a2f5e 0%, transparent 60%),
-    linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
-  min-height: 100%;
+    radial-gradient(120% 90% at 50% -10%, #241041 0%, var(--bg) 60%),
+    var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
 }
 
-#app {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 20px 16px 40px;
-  min-height: 100vh;
-}
+#app { min-height: 100%; }
 
 /* -------- Screens -------- */
 .screen { display: none; animation: fade .25s ease; }
-.screen.active { display: block; }
+/* display gehört hierher, nicht nur in die Basis: die Regel darüber kommt
+   später als der gemeinsame Block und würde sonst display:none gewinnen. */
+.screen.active {
+  display: flex; flex-direction: column; align-items: center;
+  /* „safe center": mittig, solange es passt – sonst nach oben statt oben UND
+     unten abgeschnitten. */
+  justify-content: safe center;
+  gap: 20px; min-height: 100dvh;
+  padding: clamp(18px, 5vw, 40px) 18px;
+  padding-bottom: max(clamp(18px, 5vw, 40px), env(safe-area-inset-bottom));
+}
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-.card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 28px 22px;
-  text-align: center;
-  margin-top: 6vh;
-}
-.card.wide { text-align: left; margin-top: 3vh; }
+.hero { text-align: center; }
+h2 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
 
-.logo { font-size: 52px; margin: 0 0 6px; letter-spacing: -1px; }
-.logo span { color: var(--primary); }
-.subtitle { color: var(--muted); margin: 0 0 22px; }
-h2 { margin: 0 0 6px; font-size: 26px; }
-h3.card-title { margin: 22px 0 10px; font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .hint { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
 
-/* -------- Fields & buttons -------- */
-.field { display: block; text-align: left; margin: 0 0 18px; }
-.field span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
-input[type=text] {
-  width: 100%; padding: 14px 16px; font-size: 17px;
-  background: var(--bg2); border: 1px solid var(--line);
-  border-radius: 12px; color: var(--text); outline: none;
-}
-input[type=text]:focus { border-color: var(--primary); }
+/* Karten-Container des Spielteils */
+.card.wide { text-align: left; margin-top: 3vh; }
 
-.btn {
-  display: inline-block; width: 100%; padding: 14px 18px; margin-top: 10px;
-  font-size: 16px; font-weight: 600; cursor: pointer;
-  background: var(--panel2); color: var(--text);
-  border: 1px solid var(--line); border-radius: 12px;
-  transition: transform .08s ease, filter .15s ease;
+/* -------- Listen: Zwischenstand, Bestenliste -------- */
+.players, .standings, .leaderboard { list-style: none; padding: 0; margin: 14px 0; width: 100%; }
+.standings li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border: 1px solid var(--line);
+  border-radius: 12px; margin-bottom: 8px; background: rgba(0, 0, 0, .28);
 }
-.btn:active { transform: scale(.98); }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn.primary { background: linear-gradient(135deg, var(--primary), var(--primary2)); border: none; }
-.btn.big { padding: 16px; font-size: 18px; }
-.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
-.btn.danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
-.btn.ready-on { background: var(--green); border: none; color: #05210f; }
-.row { display: flex; gap: 12px; }
-.row .btn { margin-top: 16px; }
-
-/* -------- Rooms -------- */
-.rooms-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
-.room {
-  background: var(--bg2); border: 1px solid var(--line); border-radius: 14px;
-  padding: 18px; cursor: pointer; transition: border-color .15s, transform .08s;
-}
-.room:active { transform: scale(.98); }
-.room:hover { border-color: var(--primary); }
-.room.full, .room.busy { opacity: .5; cursor: not-allowed; }
-.room h3 { margin: 0 0 8px; font-size: 18px; }
-.room .meta { color: var(--muted); font-size: 14px; }
-.room .badge { display: inline-block; margin-top: 8px; font-size: 12px; padding: 3px 8px; border-radius: 999px; }
-.badge.open { background: rgba(62,196,109,.15); color: var(--green); }
-.badge.playing { background: rgba(245,197,66,.15); color: var(--gold); }
-
-/* -------- Players / lists -------- */
-.players, .standings, .leaderboard { list-style: none; padding: 0; margin: 14px 0; }
-.players li, .standings li {
-  display: flex; align-items: center; justify-content: space-between;
-  background: var(--bg2); border: 1px solid var(--line);
-  padding: 12px 16px; border-radius: 12px; margin-bottom: 8px;
-}
-.players .tag { font-size: 12px; padding: 3px 8px; border-radius: 999px; margin-left: 8px; }
-.tag.host { background: rgba(245,197,66,.18); color: var(--gold); }
-.tag.ready { background: rgba(62,196,109,.18); color: var(--green); }
-.tag.wait { background: rgba(154,160,200,.15); color: var(--muted); }
-
 .standings li .rank { font-weight: 700; color: var(--muted); width: 28px; }
 .standings li .nm { flex: 1; margin-left: 8px; }
 .standings li .pts { font-weight: 700; }
-.standings li .delta { color: var(--green); font-size: 13px; margin-left: 10px; }
+.standings li .delta { color: var(--good); font-size: 13px; margin-left: 10px; }
 .standings li:first-child { border-color: var(--gold); }
 
 .leaderboard li {
@@ -122,6 +287,16 @@ input[type=text]:focus { border-color: var(--primary); }
 }
 .leaderboard li .lb-date { color: var(--muted); font-size: 12px; text-align: center; }
 .leaderboard li .pts { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Kurzmeldung unten – PickUp schaltet sie über .show. */
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: max(20px, env(safe-area-inset-bottom));
+  background: rgba(20, 11, 35, .96); border: 1px solid var(--line);
+  border-radius: 99px; padding: 11px 20px; font-size: 14px; font-weight: 600;
+  z-index: 90; pointer-events: none; opacity: 0; transition: opacity .2s;
+}
+#toast.show { opacity: 1; }
 
 /* -------- Game head -------- */
 .game-head {

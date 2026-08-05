@@ -69,55 +69,143 @@ function renderPattern(tokens) {
 // ================================================================
 //  START / NAME / RÄUME / LOBBY  (unverändert)
 // ================================================================
-$('#toRoomsBtn').addEventListener('click', () => {
+const NAME_KEY = 'spiele_name';   // gemeinsam mit den anderen drei Spielen
+
+// Sitzplatz-Tierchen. Gleiche Liste und gleiche Ableitung in allen vier
+// Spielen, damit dieselbe Person überall dasselbe Zeichen bekommt.
+const AVATARS = ['🦊', '🐙', '🦅', '🐺', '🦁', '🐉'];
+const avatarFor = (id) =>
+  AVATARS[[...String(id)].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATARS.length];
+
+const esc = (s) => String(s).replace(/[&<>"]/g,
+  (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+$('#nameInput').value = localStorage.getItem(NAME_KEY) || '';
+
+let visibility = 'public';
+for (const b of document.querySelectorAll('[data-vis]')) {
+  b.addEventListener('click', () => {
+    visibility = b.dataset.vis;
+    document.querySelectorAll('[data-vis]').forEach((x) => x.classList.toggle('sel', x === b));
+  });
+}
+
+/** Namen einsammeln und merken. Gibt null zurück, wenn keiner dasteht. */
+function playerName() {
   const name = $('#nameInput').value.trim();
-  if (!name) return toast('Bitte gib einen Namen ein.');
-  state.name = name; socket.emit('getLeaderboard'); show('screen-rooms');
+  if (!name) { $('#nameInput').focus(); toast('Bitte gib einen Namen ein.'); return null; }
+  state.name = name;
+  localStorage.setItem(NAME_KEY, name);
+  return name;
+}
+
+$('#createBtn').addEventListener('click', () => {
+  const name = playerName();
+  if (!name) return;
+  socket.emit('createRoom', { name, isPublic: visibility === 'public' }, (res) => {
+    if (res && res.error) return toast(res.error);
+    state.roomId = res.roomId;
+    show('screen-lobby');
+  });
 });
-$('#nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#toRoomsBtn').click(); });
+
+function joinByCode() {
+  const code = $('#codeInput').value.toUpperCase().trim();
+  if (code.length !== 4) { $('#codeInput').focus(); return toast('Der Code hat vier Zeichen.'); }
+  const name = playerName();
+  if (name) joinRoom(code);
+}
+$('#joinBtn').addEventListener('click', joinByCode);
+$('#codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinByCode(); });
+$('#nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#createBtn').click(); });
+
 $('#showLeaderboardBtn').addEventListener('click', () => { renderLeaderboard($('#leaderboardList')); show('screen-leaderboard'); });
 $('#closeLeaderboardBtn').addEventListener('click', () => show('screen-start'));
-$('#backToStartBtn').addEventListener('click', () => show('screen-start'));
+
+$('#copyBtn').addEventListener('click', async () => {
+  if (!state.roomId) return;
+  // Gegen document.baseURI gebaut: funktioniert unter /pickup/ hinter dem
+  // Reverse Proxy genauso wie lokal auf localhost:3000.
+  const link = new URL('#' + state.roomId, document.baseURI).href;
+  try {
+    await navigator.clipboard.writeText(link);
+    toast('Link kopiert – schick ihn rum.');
+  } catch {
+    // Ohne Zwischenablage (kein HTTPS, alter Browser) wenigstens den Code zeigen.
+    toast(`Code: ${state.roomId}`);
+  }
+});
 
 function renderRooms(list) {
-  const grid = $('#roomsGrid'); grid.innerHTML = '';
+  const box = $('#roomsGrid');
+  box.innerHTML = '';
+  $('#roomsCount').textContent = list.length ? `(${list.length})` : '';
+  if (!list.length) {
+    box.innerHTML =
+      '<div class="rooms-empty">Gerade ist kein Raum offen. Eröffne einen – ' +
+      'er erscheint dann bei den anderen in der Liste.</div>';
+    return;
+  }
   for (const r of list) {
-    const full = r.count >= r.max; const busy = r.status !== 'lobby';
-    const div = document.createElement('div');
-    div.className = 'room' + (full ? ' full' : '') + (busy ? ' busy' : '');
-    div.innerHTML = `<h3>${r.name}</h3><div class="meta">${r.count}/${r.max} Spieler</div>
-      <span class="badge ${busy ? 'playing' : 'open'}">${busy ? 'Im Spiel' : 'Offen'}</span>`;
-    if (!full && !busy) div.addEventListener('click', () => joinRoom(r.id));
-    grid.appendChild(div);
+    const b = document.createElement('button');
+    b.className = 'roomrow';
+    b.innerHTML = `
+      <span class="roomrow-name">${esc(r.host)}</span>
+      <span class="roomrow-meta">${r.count}/${r.max} Spieler</span>
+      <span class="roomrow-code">${r.id}</span>`;
+    b.addEventListener('click', () => { if (playerName()) joinRoom(r.id); });
+    box.appendChild(b);
   }
 }
+
 function joinRoom(roomId) {
   socket.emit('joinRoom', { roomId, name: state.name }, (res) => {
     if (res && res.error) return toast(res.error);
-    state.roomId = roomId; show('screen-lobby');
+    state.roomId = res.roomId;
+    show('screen-lobby');
   });
 }
 
 function renderLobby(rs) {
   $('#lobbyTitle').textContent = rs.name;
-  const ul = $('#lobbyPlayers'); ul.innerHTML = '';
-  for (const p of rs.players) {
-    const li = document.createElement('li');
-    li.innerHTML = `<span>${p.name}${p.id === myId ? ' <small>(du)</small>' : ''}</span>
-      <span>${p.isHost ? '<span class="tag host">Host</span>' : ''}
-      <span class="tag ${p.ready ? 'ready' : 'wait'}">${p.ready ? 'Bereit' : 'Wartet'}</span></span>`;
-    ul.appendChild(li);
+  $('#roomCode').textContent = rs.roomId;
+  $('#roomVis').textContent = rs.isPublic
+    ? 'Öffentlich – steht in der Liste'
+    : 'Privat – nur mit Code';
+
+  const box = $('#lobbyPlayers');
+  box.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const p = rs.players[i];
+    const d = document.createElement('div');
+    if (!p) {
+      d.className = 'seat empty';
+      d.innerHTML = '<div class="av">🪑</div><div class="nm">frei</div><div class="st">wartet</div>';
+    } else {
+      d.className = 'seat' + (p.ready || p.isHost ? ' ready' : '');
+      d.innerHTML = `
+        <div class="av">${avatarFor(p.id)}</div>
+        <div class="nm">${esc(p.name)}${p.id === myId ? ' (du)' : ''}</div>
+        <div class="st">${p.isHost ? 'startet' : p.ready ? '✓ bereit' : 'wartet'}</div>
+        ${p.isHost ? '<div class="host">HOST</div>' : ''}`;
+    }
+    box.appendChild(d);
   }
+
   const me = rs.players.find((p) => p.id === myId);
   const readyBtn = $('#readyBtn');
-  if (me) { readyBtn.textContent = me.ready ? 'Nicht bereit' : 'Bereit'; readyBtn.classList.toggle('ready-on', me.ready); }
+  if (me) {
+    readyBtn.textContent = me.ready ? '✓ Bereit' : 'Bereit';
+    readyBtn.classList.toggle('on', me.ready);
+  }
   const allReady = rs.players.length >= rs.minPlayers && rs.players.every((p) => p.ready);
   $('#startBtn').disabled = !(state.isHost && allReady);
   $('#startBtn').style.display = state.isHost ? '' : 'none';
+  $('#readyBtn').style.display = state.isHost ? 'none' : '';
 }
 $('#readyBtn').addEventListener('click', () => socket.emit('toggleReady'));
 $('#startBtn').addEventListener('click', () => socket.emit('startGame'));
-$('#leaveLobbyBtn').addEventListener('click', () => { socket.emit('leaveRoom'); state.roomId = null; show('screen-rooms'); });
+$('#leaveLobbyBtn').addEventListener('click', () => { socket.emit('leaveRoom'); state.roomId = null; show('screen-start'); });
 
 // ================================================================
 //  SPIEL
@@ -346,3 +434,8 @@ socket.on('gameOver', ({ standings }) => {
 socket.on('gameAborted', ({ reason }) => {
   stopTimer(); toast('Spiel abgebrochen: ' + reason); show('screen-lobby');
 });
+
+// Geteilter Link: .../pickup/#AB3K legt den Code ins Feld. Beigetreten wird
+// erst auf Knopfdruck – vorher fehlt ja noch der Name.
+const shared = (location.hash || '').replace('#', '').toUpperCase().trim();
+if (/^[A-Z0-9]{4}$/.test(shared)) $('#codeInput').value = shared;

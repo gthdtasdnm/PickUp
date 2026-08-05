@@ -27,13 +27,25 @@ function durationFor(round) {
   return CONFIG.roundDurations[round - 1] ?? CONFIG.roundDurations[CONFIG.roundDurations.length - 1];
 }
 
-const ROOM_IDS = ['1', '2', '3', '4'];
-const rooms = {};
+/** Ohne I, O, 0 und 1 – die sind auf einem Handydisplay nicht zu unterscheiden. */
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-function createRoom(id) {
-  return {
-    id,
-    name: 'Raum ' + id,
+/** Raumcode -> Raum. Räume entstehen auf Zuruf und verschwinden, wenn sie leer sind. */
+const rooms = new Map();
+
+function newCode() {
+  for (let i = 0; i < 500; i++) {
+    let c = '';
+    for (let k = 0; k < 4; k++) c += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+    if (!rooms.has(c)) return c;
+  }
+  return 'P' + Date.now().toString(36).slice(-3).toUpperCase();
+}
+
+function createRoom(isPublic = true) {
+  const room = {
+    id: newCode(),
+    isPublic: !!isPublic,
     players: new Map(),   // socketId -> { id, name, ready }
     hostId: null,
     status: 'lobby',      // lobby | playing | results | finished
@@ -43,18 +55,41 @@ function createRoom(id) {
     submitted: new Set(),
     timer: null,
   };
+  rooms.set(room.id, room);
+  return room;
 }
-for (const id of ROOM_IDS) rooms[id] = createRoom(id);
+
+/** Der Raum heisst nach dem, der ihn aufgemacht hat. */
+function roomName(room) {
+  const host = room.players.get(room.hostId)?.name;
+  return host ? `${host}s Raum` : `Raum ${room.id}`;
+}
+
+/** Raum abraeumen, sobald der Letzte raus ist. */
+function destroyRoom(room) {
+  if (room.timer) { clearTimeout(room.timer); room.timer = null; }
+  rooms.delete(room.id);
+}
 
 // -------------------- Hilfsfunktionen --------------------
+
+/**
+ * Was auf der Startseite steht: offene, oeffentliche Raeume mit Leuten drin.
+ * Private Raeume erreicht man nur ueber den Code.
+ */
 function roomsSummary() {
-  return ROOM_IDS.map((id) => ({
-    id,
-    name: rooms[id].name,
-    count: rooms[id].players.size,
-    max: CONFIG.maxPlayers,
-    status: rooms[id].status,
-  }));
+  return [...rooms.values()]
+    .filter((r) => r.isPublic && r.status === 'lobby' &&
+      r.players.size > 0 && r.players.size < CONFIG.maxPlayers)
+    .map((r) => ({
+      id: r.id,
+      name: roomName(r),
+      host: r.players.get(r.hostId)?.name ?? '?',
+      count: r.players.size,
+      max: CONFIG.maxPlayers,
+      status: r.status,
+    }))
+    .sort((a, b) => b.count - a.count);
 }
 
 function playerList(room) {
@@ -70,7 +105,8 @@ function playerList(room) {
 function emitRoomState(room) {
   io.to(room.id).emit('roomState', {
     roomId: room.id,
-    name: room.name,
+    name: roomName(room),
+    isPublic: room.isPublic,
     status: room.status,
     round: room.round,
     totalRounds: CONFIG.rounds,
@@ -178,28 +214,48 @@ io.on('connection', (socket) => {
   socket.emit('rooms', roomsSummary());
   socket.emit('leaderboard', getLeaderboard());
 
-  socket.on('joinRoom', ({ roomId, name }, cb = () => {}) => {
-    const room = rooms[roomId];
-    if (!room) return cb({ error: 'Raum existiert nicht.' });
-    if (room.status !== 'lobby') return cb({ error: 'In diesem Raum laeuft gerade ein Spiel.' });
-    if (room.players.size >= CONFIG.maxPlayers) return cb({ error: 'Raum ist voll.' });
-
-    const cleanName = String(name || '').trim().slice(0, 20) || 'Spieler';
+  /** Gemeinsame Logik von Beitreten und Aufmachen. */
+  function sitDown(room, name, cb) {
+    const cleanName = String(name || '').trim().slice(0, 16) || 'Spieler';
     room.players.set(socket.id, { id: socket.id, name: cleanName, ready: false });
     room.totals.set(socket.id, 0);
     if (!room.hostId) room.hostId = socket.id;
 
-    socket.data.roomId = roomId;
+    socket.data.roomId = room.id;
     socket.data.name = cleanName;
-    socket.join(roomId);
+    socket.join(room.id);
 
-    cb({ ok: true, roomId });
+    cb({ ok: true, roomId: room.id });
+    emitRoomState(room);
+    broadcastRooms();
+  }
+
+  socket.on('createRoom', ({ name, isPublic } = {}, cb = () => {}) => {
+    if (socket.data.roomId) leave(socket);
+    sitDown(createRoom(isPublic !== false), name, cb);
+  });
+
+  socket.on('joinRoom', ({ roomId, name }, cb = () => {}) => {
+    const code = String(roomId || '').toUpperCase().trim();
+    const room = rooms.get(code);
+    if (!room) return cb({ error: 'Diesen Raum gibt es nicht.' });
+    if (room.status !== 'lobby') return cb({ error: 'In diesem Raum laeuft gerade ein Spiel.' });
+    if (room.players.size >= CONFIG.maxPlayers) return cb({ error: 'Raum ist voll.' });
+    if (socket.data.roomId) leave(socket);
+    sitDown(room, name, cb);
+  });
+
+  socket.on('setVisibility', ({ isPublic } = {}) => {
+    const room = rooms.get(socket.data.roomId);
+    // Nur der Host, und nur solange nicht gespielt wird.
+    if (!room || room.hostId !== socket.id || room.status !== 'lobby') return;
+    room.isPublic = !!isPublic;
     emitRoomState(room);
     broadcastRooms();
   });
 
   socket.on('toggleReady', () => {
-    const room = rooms[socket.data.roomId];
+    const room = rooms.get(socket.data.roomId);
     if (!room) return;
     // "Bereit" gilt in der Lobby UND zwischen den Runden (Ergebnis-Screen).
     if (room.status !== 'lobby' && room.status !== 'results') return;
@@ -212,7 +268,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('startGame', () => {
-    const room = rooms[socket.data.roomId];
+    const room = rooms.get(socket.data.roomId);
     if (!room || room.hostId !== socket.id) return;
     if (room.status !== 'lobby') return;
     if (room.players.size < CONFIG.minPlayers) return;
@@ -224,7 +280,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('submitRoundScore', ({ round, score }) => {
-    const room = rooms[socket.data.roomId];
+    const room = rooms.get(socket.data.roomId);
     if (!room || room.status !== 'playing') return;
     if (round !== room.round) return;
     if (room.submitted.has(socket.id)) return;
@@ -237,7 +293,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('backToLobby', () => {
-    const room = rooms[socket.data.roomId];
+    const room = rooms.get(socket.data.roomId);
     if (!room) return;
     resetRoomToLobby(room);
     emitRoomState(room);
@@ -251,7 +307,7 @@ io.on('connection', (socket) => {
 });
 
 function leave(socket) {
-  const room = rooms[socket.data.roomId];
+  const room = rooms.get(socket.data.roomId);
   if (!room) return;
   const wasHost = room.hostId === socket.id;
   room.players.delete(socket.id);
@@ -262,7 +318,7 @@ function leave(socket) {
   socket.data.roomId = null;
 
   if (room.players.size === 0) {
-    resetRoomToLobby(room);
+    destroyRoom(room);
     broadcastRooms();
     return;
   }
