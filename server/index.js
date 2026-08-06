@@ -3,6 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import { getLeaderboard, addLeaderboardEntry } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,15 @@ const CONFIG = {
   minPlayers: 2,
   graceSeconds: 20,                       // Puffer bevor der Server eine Runde zwangsweise abschliesst
 };
+
+/**
+ * Karenzzeit: so lange bleibt ein Platz reserviert, wenn die Verbindung weg ist.
+ * Wer den Link teilt, wechselt dabei zwangslaeufig die App – auf dem Handy stirbt
+ * dabei der Socket. Ohne diese Reserve loest sich der eigene Raum genau in dem
+ * Moment auf, in dem man ihn herumschickt. Gleicher Wert in allen vier Spielen.
+ */
+const REJOIN_MS = 60_000;
+
 function durationFor(round) {
   return CONFIG.roundDurations[round - 1] ?? CONFIG.roundDurations[CONFIG.roundDurations.length - 1];
 }
@@ -30,7 +40,7 @@ function durationFor(round) {
 /** Ohne I, O, 0 und 1 – die sind auf einem Handydisplay nicht zu unterscheiden. */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-/** Raumcode -> Raum. Räume entstehen auf Zuruf und verschwinden, wenn sie leer sind. */
+/** Raumcode -> Raum. Räume entstehen auf Zuruf und verschwinden, wenn kein Platz mehr belegt ist. */
 const rooms = new Map();
 
 function newCode() {
@@ -46,12 +56,14 @@ function createRoom(isPublic = true) {
   const room = {
     id: newCode(),
     isPublic: !!isPublic,
-    players: new Map(),   // socketId -> { id, name, ready }
+    // Schluessel ist die Spieler-ID aus dem Browser, nicht die Socket-ID: die
+    // Verbindung darf wechseln, ohne dass der Platz verloren geht.
+    players: new Map(),   // pid -> { id, name, ready, online, socketId, dropTimer }
     hostId: null,
     status: 'lobby',      // lobby | playing | results | finished
     round: 0,
-    totals: new Map(),    // socketId -> Gesamtpunkte
-    roundScores: new Map(),// socketId -> Punkte dieser Runde
+    totals: new Map(),    // pid -> Gesamtpunkte
+    roundScores: new Map(),// pid -> Punkte dieser Runde
     submitted: new Set(),
     timer: null,
   };
@@ -65,29 +77,52 @@ function roomName(room) {
   return host ? `${host}s Raum` : `Raum ${room.id}`;
 }
 
-/** Raum abraeumen, sobald der Letzte raus ist. */
+/** Raum abraeumen, sobald kein Platz mehr belegt ist. */
 function destroyRoom(room) {
   if (room.timer) { clearTimeout(room.timer); room.timer = null; }
+  for (const p of room.players.values()) {
+    if (p.dropTimer) clearTimeout(p.dropTimer);
+  }
   rooms.delete(room.id);
 }
 
 // -------------------- Hilfsfunktionen --------------------
 
+/** Wer gerade wirklich am Tisch sitzt. Reservierte Plaetze zaehlen nicht mit. */
+function onlinePlayers(room) {
+  return [...room.players.values()].filter((p) => p.online);
+}
+
+/**
+ * Der Host ist immer jemand, der auch da ist. Geht er raus oder faellt die
+ * Verbindung weg, rueckt der naechste Anwesende nach – sonst steht der Raum
+ * ohne Host da und niemand kann mehr starten.
+ */
+function ensureHost(room) {
+  const current = room.players.get(room.hostId);
+  if (current?.online) return;
+  const next = onlinePlayers(room)[0];
+  room.hostId = next ? next.id : null;
+}
+
 /**
  * Was auf der Startseite steht: offene, oeffentliche Raeume mit Leuten drin.
+ * Gezaehlt wird nach *anwesenden* Spielern – sonst steht ein Raum, dessen Leute
+ * gerade alle weg sind, noch in der Liste und zeigt dabei "0/4".
  * Private Raeume erreicht man nur ueber den Code.
  */
 function roomsSummary() {
   return [...rooms.values()]
-    .filter((r) => r.isPublic && r.status === 'lobby' &&
-      r.players.size > 0 && r.players.size < CONFIG.maxPlayers)
-    .map((r) => ({
-      id: r.id,
-      name: roomName(r),
-      host: r.players.get(r.hostId)?.name ?? '?',
-      count: r.players.size,
+    .map((r) => ({ room: r, online: onlinePlayers(r) }))
+    .filter(({ room, online }) => room.isPublic && room.status === 'lobby' &&
+      online.length > 0 && room.players.size < CONFIG.maxPlayers)
+    .map(({ room, online }) => ({
+      id: room.id,
+      name: roomName(room),
+      host: room.players.get(room.hostId)?.name ?? '?',
+      count: online.length,
       max: CONFIG.maxPlayers,
-      status: r.status,
+      status: room.status,
     }))
     .sort((a, b) => b.count - a.count);
 }
@@ -97,6 +132,7 @@ function playerList(room) {
     id: p.id,
     name: p.name,
     ready: p.ready,
+    online: p.online,
     isHost: p.id === room.hostId,
     total: room.totals.get(p.id) || 0,
   }));
@@ -139,14 +175,12 @@ function resetRoomToLobby(room) {
   room.roundScores = new Map();
   room.submitted = new Set();
   for (const p of room.players.values()) p.ready = false;
-  // Host neu bestimmen: erster verbleibender Spieler, sonst keiner.
-  // (Fix: alter Host-ID blieb frueher stehen -> kein Host nach Neubeitritt.)
-  room.hostId = room.players.size ? room.players.keys().next().value : null;
+  ensureHost(room);
 }
 
 function allReady(room) {
-  return room.players.size >= CONFIG.minPlayers
-    && [...room.players.values()].every((p) => p.ready);
+  const online = onlinePlayers(room);
+  return online.length >= CONFIG.minPlayers && online.every((p) => p.ready);
 }
 
 /**
@@ -155,8 +189,9 @@ function allReady(room) {
  * (Zwischen den Runden gibt es fuer alle einen Bereit-Knopf -> allReady.)
  */
 function lobbyReady(room) {
-  return room.players.size >= CONFIG.minPlayers
-    && [...room.players.values()].every((p) => p.ready || p.id === room.hostId);
+  const online = onlinePlayers(room);
+  return online.length >= CONFIG.minPlayers
+    && online.every((p) => p.ready || p.id === room.hostId);
 }
 
 function startRound(room) {
@@ -213,7 +248,9 @@ function endRound(room) {
 }
 
 function maybeFinishRound(room) {
-  const active = [...room.players.keys()];
+  // Auf jemanden zu warten, der gerade gar nicht da ist, haelt die Runde
+  // sonst bis zum Ablauf des Timers auf.
+  const active = onlinePlayers(room).map((p) => p.id);
   if (active.length > 0 && active.every((id) => room.submitted.has(id))) {
     endRound(room);
   }
@@ -224,24 +261,39 @@ io.on('connection', (socket) => {
   socket.emit('rooms', roomsSummary());
   socket.emit('leaderboard', getLeaderboard());
 
+  /** Spieler-ID aus dem Browser uebernehmen, sonst eine neue vergeben. */
+  socket.on('hello', ({ pid } = {}, cb = () => {}) => {
+    socket.data.pid = /^[a-z0-9-]{6,64}$/i.test(String(pid ?? '')) ? String(pid) : randomUUID();
+    cb({ pid: socket.data.pid });
+  });
+
+  function myPid() {
+    if (!socket.data.pid) socket.data.pid = randomUUID();
+    return socket.data.pid;
+  }
+
   /** Gemeinsame Logik von Beitreten und Aufmachen. */
   function sitDown(room, name, cb) {
+    const pid = myPid();
     const cleanName = String(name || '').trim().slice(0, 16) || 'Spieler';
-    room.players.set(socket.id, { id: socket.id, name: cleanName, ready: false });
-    room.totals.set(socket.id, 0);
-    if (!room.hostId) room.hostId = socket.id;
+    room.players.set(pid, {
+      id: pid, name: cleanName, ready: false, online: true,
+      socketId: socket.id, dropTimer: null,
+    });
+    room.totals.set(pid, 0);
+    ensureHost(room);
 
     socket.data.roomId = room.id;
     socket.data.name = cleanName;
     socket.join(room.id);
 
-    cb({ ok: true, roomId: room.id });
+    cb({ ok: true, roomId: room.id, pid });
     emitRoomState(room);
     broadcastRooms();
   }
 
   socket.on('createRoom', ({ name, isPublic } = {}, cb = () => {}) => {
-    if (socket.data.roomId) leave(socket);
+    if (socket.data.roomId) removeFromRoom(socket, myPid());
     sitDown(createRoom(isPublic !== false), name, cb);
   });
 
@@ -249,16 +301,33 @@ io.on('connection', (socket) => {
     const code = String(roomId || '').toUpperCase().trim();
     const room = rooms.get(code);
     if (!room) return cb({ error: 'Diesen Raum gibt es nicht.' });
+
+    // Rueckkehrer bekommen ihren Platz zurueck – auch wenn der Raum inzwischen
+    // voll ist oder gerade gespielt wird.
+    if (room.players.has(myPid())) return reattach(socket, room, cb);
+
     if (room.status !== 'lobby') return cb({ error: 'In diesem Raum laeuft gerade ein Spiel.' });
     if (room.players.size >= CONFIG.maxPlayers) return cb({ error: 'Raum ist voll.' });
-    if (socket.data.roomId) leave(socket);
+    if (socket.data.roomId) removeFromRoom(socket, myPid());
     sitDown(room, name, cb);
+  });
+
+  /**
+   * Nach Verbindungsabbruch oder Reload zurueck an den alten Platz. Der Client
+   * schickt das von allein, sobald er wieder steht – ohne Zutun des Spielers.
+   */
+  socket.on('resume', ({ roomId } = {}, cb = () => {}) => {
+    const room = rooms.get(String(roomId || '').toUpperCase().trim());
+    if (!room || !room.players.has(myPid())) {
+      return cb({ error: 'Der Raum ist nicht mehr da.' });
+    }
+    reattach(socket, room, cb);
   });
 
   socket.on('setVisibility', ({ isPublic } = {}) => {
     const room = rooms.get(socket.data.roomId);
     // Nur der Host, und nur solange nicht gespielt wird.
-    if (!room || room.hostId !== socket.id || room.status !== 'lobby') return;
+    if (!room || room.hostId !== socket.data.pid || room.status !== 'lobby') return;
     room.isPublic = !!isPublic;
     emitRoomState(room);
     broadcastRooms();
@@ -269,7 +338,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     // "Bereit" gilt in der Lobby UND zwischen den Runden (Ergebnis-Screen).
     if (room.status !== 'lobby' && room.status !== 'results') return;
-    const p = room.players.get(socket.id);
+    const p = room.players.get(socket.data.pid);
     if (!p) return;
     p.ready = !p.ready;
     emitRoomState(room);
@@ -279,7 +348,7 @@ io.on('connection', (socket) => {
 
   socket.on('startGame', () => {
     const room = rooms.get(socket.data.roomId);
-    if (!room || room.hostId !== socket.id) return;
+    if (!room || room.hostId !== socket.data.pid) return;
     if (room.status !== 'lobby') return;
     if (!lobbyReady(room)) return;
 
@@ -292,12 +361,13 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.roomId);
     if (!room || room.status !== 'playing') return;
     if (round !== room.round) return;
-    if (room.submitted.has(socket.id)) return;
+    const pid = socket.data.pid;
+    if (room.submitted.has(pid)) return;
 
     const s = Math.max(0, Number(score) || 0);
-    room.roundScores.set(socket.id, s);
-    room.totals.set(socket.id, (room.totals.get(socket.id) || 0) + s);
-    room.submitted.add(socket.id);
+    room.roundScores.set(pid, s);
+    room.totals.set(pid, (room.totals.get(pid) || 0) + s);
+    room.submitted.add(pid);
     maybeFinishRound(room);
   });
 
@@ -309,32 +379,104 @@ io.on('connection', (socket) => {
     broadcastRooms();
   });
 
-  socket.on('leaveRoom', () => leave(socket));
-  socket.on('disconnect', () => leave(socket));
+  // Der Knopf "Raum verlassen" ist eine Entscheidung – da gibt es keine Karenzzeit.
+  socket.on('leaveRoom', () => removeFromRoom(socket, socket.data.pid));
+
+  // Verbindung weg ist etwas anderes: der Platz bleibt eine Weile reserviert.
+  socket.on('disconnect', () => holdSeat(socket));
 
   socket.on('getLeaderboard', () => socket.emit('leaderboard', getLeaderboard()));
 });
 
-function leave(socket) {
+/** Einen Rueckkehrer wieder mit seinem Platz verbinden. */
+function reattach(socket, room, cb) {
+  // Woanders gesessen? Den alten Platz erst raeumen, sonst haengt man in zweien.
+  if (socket.data.roomId && socket.data.roomId !== room.id) {
+    removeFromRoom(socket, socket.data.pid);
+  }
+  const p = room.players.get(socket.data.pid);
+  if (p.dropTimer) { clearTimeout(p.dropTimer); p.dropTimer = null; }
+  p.online = true;
+  p.socketId = socket.id;
+  socket.data.roomId = room.id;
+  socket.join(room.id);
+  ensureHost(room);
+
+  cb({
+    ok: true,
+    roomId: room.id,
+    pid: p.id,
+    status: room.status,
+    // Damit der Client den Ergebnis-Screen wieder aufbauen kann – er hat den
+    // Zwischenstand nach einem Reload ja nicht mehr.
+    standings: room.status === 'results' || room.status === 'finished' ? standings(room) : null,
+    round: room.round,
+    totalRounds: CONFIG.rounds,
+  });
+  emitRoomState(room);
+  broadcastRooms();
+}
+
+/**
+ * Verbindung weg: Platz reservieren, nicht raeumen. Erst wenn die Karenzzeit
+ * abgelaufen ist, wird der Platz wirklich frei.
+ */
+function holdSeat(socket) {
   const room = rooms.get(socket.data.roomId);
+  const pid = socket.data.pid;
   if (!room) return;
-  const wasHost = room.hostId === socket.id;
-  room.players.delete(socket.id);
-  room.totals.delete(socket.id);
-  room.roundScores.delete(socket.id);
-  room.submitted.delete(socket.id);
-  socket.leave(room.id);
+  const p = room.players.get(pid);
+  // Woanders schon wieder eingestiegen? Dann gehoert der Platz der neuen Verbindung.
+  if (!p || p.socketId !== socket.id) return;
+
+  p.online = false;
+  p.ready = false;
+  ensureHost(room);
+
+  if (p.dropTimer) clearTimeout(p.dropTimer);
+  p.dropTimer = setTimeout(() => dropSeat(room, pid), REJOIN_MS);
+
+  // Laeuft ein Spiel, darf ein Abwesender die Runde nicht blockieren.
+  if (room.status === 'playing') maybeFinishRound(room);
+  emitRoomState(room);
+  broadcastRooms();
+}
+
+/** Karenzzeit abgelaufen – der Platz wird frei. */
+function dropSeat(room, pid) {
+  const p = room.players.get(pid);
+  if (!p || p.online) return;
+  releasePlayer(room, pid);
+}
+
+/** Sofort raus, ohne Karenzzeit (Knopf "Raum verlassen"). */
+function removeFromRoom(socket, pid) {
+  const room = rooms.get(socket.data.roomId);
   socket.data.roomId = null;
+  if (!room) return;
+  socket.leave(room.id);
+  releasePlayer(room, pid);
+}
+
+/** Platz endgueltig freigeben und aufraeumen, was daran haengt. */
+function releasePlayer(room, pid) {
+  const p = room.players.get(pid);
+  if (!p) return;
+  if (p.dropTimer) { clearTimeout(p.dropTimer); p.dropTimer = null; }
+  room.players.delete(pid);
+  room.totals.delete(pid);
+  room.roundScores.delete(pid);
+  room.submitted.delete(pid);
 
   if (room.players.size === 0) {
     destroyRoom(room);
     broadcastRooms();
     return;
   }
-  if (wasHost) room.hostId = room.players.keys().next().value;
+  ensureHost(room);
 
   // Laeuft ein Spiel und es sind zu wenige Spieler uebrig -> zurueck in die Lobby
-  if (room.status !== 'lobby' && room.players.size < CONFIG.minPlayers) {
+  if (room.status !== 'lobby' && onlinePlayers(room).length < CONFIG.minPlayers) {
     resetRoomToLobby(room);
     io.to(room.id).emit('gameAborted', { reason: 'Zu wenige Spieler.' });
   } else if (room.status === 'playing') {

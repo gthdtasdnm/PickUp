@@ -5,8 +5,34 @@ import { SYMBOL_SVG, SHAPE_SVG, SHAPE_COLOR } from './symbols.js';
 // So funktioniert Socket.IO ohne feste Pfad-Annahme in beiden Fällen.
 const BASE = location.pathname.replace(/[^/]*$/, '');
 const socket = io({ path: BASE + 'socket.io' });
-let myId = null;
 const fmt = (n) => Math.round(n).toLocaleString('de-DE');
+
+// ---------------- Identität und Sitzung ----------------
+// Die Spieler-ID hängt am Tab, nicht am Gerät: ein Reload oder ein
+// Verbindungsabbruch führt zurück an den Platz, zwei Fenster sind aber zwei
+// Spieler. Eigene Schlüssel je Spiel – alle vier liegen unter derselben Domain
+// und teilen sich damit den Speicher.
+const PID_KEY = 'pu_pid';
+const ROOM_KEY = 'pu_room';
+
+const store = {
+  get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* Privatmodus */ } },
+  del(k) { try { sessionStorage.removeItem(k); } catch { /* Privatmodus */ } },
+};
+
+function ownId() {
+  let id = store.get(PID_KEY);
+  if (!id) {
+    id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    store.set(PID_KEY, id);
+  }
+  return id;
+}
+
+let myId = ownId();
+const rememberRoom = (id) => store.set(ROOM_KEY, id);
+const forgetRoom = () => store.del(ROOM_KEY);
 
 // ---------------- App-Status ----------------
 const state = { name: '', roomId: null, isHost: false, round: 0, totalRounds: 5, leaderboard: [] };
@@ -105,6 +131,7 @@ $('#createBtn').addEventListener('click', () => {
   socket.emit('createRoom', { name, isPublic: visibility === 'public' }, (res) => {
     if (res && res.error) return toast(res.error);
     state.roomId = res.roomId;
+    rememberRoom(res.roomId);
     show('screen-lobby');
   });
 });
@@ -162,6 +189,7 @@ function joinRoom(roomId) {
   socket.emit('joinRoom', { roomId, name: state.name }, (res) => {
     if (res && res.error) return toast(res.error);
     state.roomId = res.roomId;
+    rememberRoom(res.roomId);
     show('screen-lobby');
   });
 }
@@ -182,11 +210,11 @@ function renderLobby(rs) {
       d.className = 'seat empty';
       d.innerHTML = '<div class="av">🪑</div><div class="nm">frei</div><div class="st">wartet</div>';
     } else {
-      d.className = 'seat' + (p.ready || p.isHost ? ' ready' : '');
+      d.className = 'seat' + (p.ready || p.isHost ? ' ready' : '') + (p.online ? '' : ' off');
       d.innerHTML = `
         <div class="av">${avatarFor(p.id)}</div>
         <div class="nm">${esc(p.name)}${p.id === myId ? ' (du)' : ''}</div>
-        <div class="st">${p.isHost ? 'startet' : p.ready ? '✓ bereit' : 'wartet'}</div>
+        <div class="st">${!p.online ? 'weg' : p.isHost ? 'startet' : p.ready ? '✓ bereit' : 'wartet'}</div>
         ${p.isHost ? '<div class="host">HOST</div>' : ''}`;
     }
     box.appendChild(d);
@@ -199,15 +227,22 @@ function renderLobby(rs) {
     readyBtn.classList.toggle('on', me.ready);
   }
   // Der Host hat hier keinen Bereit-Knopf (er startet ja), also zaehlt er als bereit.
-  const allReady = rs.players.length >= rs.minPlayers
-    && rs.players.every((p) => p.ready || p.isHost);
+  // Wer gerade weg ist, zählt nicht mit – sonst blockiert er den Start.
+  const online = rs.players.filter((p) => p.online);
+  const allReady = online.length >= rs.minPlayers
+    && online.every((p) => p.ready || p.isHost);
   $('#startBtn').disabled = !(state.isHost && allReady);
   $('#startBtn').style.display = state.isHost ? '' : 'none';
   $('#readyBtn').style.display = state.isHost ? 'none' : '';
 }
 $('#readyBtn').addEventListener('click', () => socket.emit('toggleReady'));
 $('#startBtn').addEventListener('click', () => socket.emit('startGame'));
-$('#leaveLobbyBtn').addEventListener('click', () => { socket.emit('leaveRoom'); state.roomId = null; show('screen-start'); });
+$('#leaveLobbyBtn').addEventListener('click', () => {
+  socket.emit('leaveRoom');
+  state.roomId = null;
+  forgetRoom();
+  show('screen-start');
+});
 
 // ================================================================
 //  SPIEL
@@ -403,7 +438,56 @@ function renderLeaderboard(target) {
 // ================================================================
 //  SOCKET-EVENTS
 // ================================================================
-socket.on('connect', () => { myId = socket.id; });
+socket.on('connect', () => {
+  // Erst die eigene ID anmelden, dann fragen, ob der alte Platz noch steht.
+  socket.emit('hello', { pid: myId }, (res) => {
+    if (res && res.pid) myId = res.pid;
+    const back = store.get(ROOM_KEY);
+    if (!back) return;
+    socket.emit('resume', { roomId: back }, (r) => {
+      if (!r || r.error) { forgetRoom(); return; }
+      state.roomId = r.roomId;
+      state.totalRounds = r.totalRounds || state.totalRounds;
+      backToScreen(r);
+    });
+  });
+});
+
+socket.on('disconnect', () => toast('Verbindung weg – versuche neu …'));
+
+/**
+ * Nach einem Verbindungsabbruch wieder auf dem richtigen Bildschirm landen.
+ * Ohne das steht man auf der Startseite, obwohl man längst wieder im Raum sitzt.
+ */
+function backToScreen(r) {
+  if (r.status === 'results') {
+    $('#resultsTitle').textContent = `Zwischenstand – Runde ${r.round}/${state.totalRounds}`;
+    renderStandings($('#standings'), r.standings || []);
+    show('screen-results');
+    return;
+  }
+  if (r.status === 'finished') {
+    renderStandings($('#finalStandings'), (r.standings || []).map((s) => ({ ...s, roundScore: null })));
+    renderLeaderboard($('#finalLeaderboard'));
+    show('screen-final');
+    return;
+  }
+  if (r.status === 'playing') {
+    // Nur die Verbindung war weg, die Seite läuft noch? Dann einfach weiterspielen.
+    if (!game.submitted && game.timer && state.round === r.round) return;
+    // Sonst ist der lokale Rundenstand futsch (Reload). Diese Runde mit 0
+    // abgeben, statt die anderen bis zum Ablauf des Timers warten zu lassen.
+    state.round = r.round;
+    game.submitted = true;
+    stopTimer();
+    socket.emit('submitRoundScore', { round: r.round, score: 0 });
+    toast('Runde verpasst – ab der nächsten bist du wieder dabei.');
+    show('screen-wait');
+    return;
+  }
+  show('screen-lobby');
+}
+
 socket.on('rooms', renderRooms);
 socket.on('leaderboard', (lb) => { state.leaderboard = lb; });
 
