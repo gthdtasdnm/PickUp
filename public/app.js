@@ -241,6 +241,8 @@ $('#leaveLobbyBtn').addEventListener('click', () => {
   socket.emit('leaveRoom');
   state.roomId = null;
   forgetRoom();
+  // Den Code aus der Adresse nehmen, sonst führt ein Neuladen wieder hinein.
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   show('screen-start');
 });
 
@@ -443,9 +445,9 @@ socket.on('connect', () => {
   socket.emit('hello', { pid: myId }, (res) => {
     if (res && res.pid) myId = res.pid;
     const back = store.get(ROOM_KEY);
-    if (!back) return;
+    if (!back) return openShared();
     socket.emit('resume', { roomId: back }, (r) => {
-      if (!r || r.error) { forgetRoom(); return; }
+      if (!r || r.error) { forgetRoom(); return openShared(); }
       state.roomId = r.roomId;
       state.totalRounds = r.totalRounds || state.totalRounds;
       backToScreen(r);
@@ -521,7 +523,38 @@ socket.on('gameAborted', ({ reason }) => {
   stopTimer(); toast('Spiel abgebrochen: ' + reason); show('screen-lobby');
 });
 
-// Geteilter Link: .../pickup/#AB3K legt den Code ins Feld. Beigetreten wird
-// erst auf Knopfdruck – vorher fehlt ja noch der Name.
+// ================================================================
+//  GETEILTER LINK
+// ================================================================
+// .../pickup/#AB3K – der Link ist die ganze Interaktion. Wer ihn öffnet, soll
+// im Raum landen und nicht auf einer Startseite, auf der er den Raum erst
+// suchen muss. Ist der Name schon bekannt, passiert das ohne einen Klick.
 const shared = (location.hash || '').replace('#', '').toUpperCase().trim();
-if (/^[A-Z0-9]{4}$/.test(shared)) $('#codeInput').value = shared;
+const sharedCode = /^[A-Z0-9]{4}$/.test(shared) ? shared : null;
+
+/** Startseite auf „du bist eingeladen" umstellen: eine Frage, ein Knopf. */
+function invitationMode() {
+  if (!sharedCode) return;
+  $('#codeInput').value = sharedCode;
+  $('#screen-start .tag').textContent = `Du bist eingeladen – Raum ${sharedCode}.`;
+
+  // Den Knopf austauschen statt umbeschriften: sonst bliebe der alte
+  // Klick-Handler dran und würde zusätzlich einen neuen Raum aufmachen.
+  const alt = $('#createBtn');
+  const btn = alt.cloneNode(true);
+  btn.textContent = 'Beitreten';
+  alt.replaceWith(btn);
+  btn.addEventListener('click', () => { if (playerName()) joinRoom(sharedCode); });
+}
+
+/** Name schon bekannt? Dann direkt rein, ohne Zwischenschritt. */
+function openShared() {
+  if (!sharedCode || state.roomId) return;
+  const name = (localStorage.getItem(NAME_KEY) || '').trim();
+  if (!name) { $('#nameInput').focus(); return; }
+  $('#nameInput').value = name;
+  state.name = name;
+  joinRoom(sharedCode);
+}
+
+invitationMode();

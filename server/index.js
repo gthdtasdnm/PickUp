@@ -26,12 +26,23 @@ const CONFIG = {
 };
 
 /**
- * Karenzzeit: so lange bleibt ein Platz reserviert, wenn die Verbindung weg ist.
- * Wer den Link teilt, wechselt dabei zwangslaeufig die App – auf dem Handy stirbt
- * dabei der Socket. Ohne diese Reserve loest sich der eigene Raum genau in dem
- * Moment auf, in dem man ihn herumschickt. Gleicher Wert in allen vier Spielen.
+ * Zwei verschiedene Dinge, die man leicht verwechselt:
+ *
+ * ROOM_IDLE_MS – so lange bleibt ein *Raum* offen, in dem gerade niemand sitzt.
+ *   Das ist der Puffer fuers Link-Teilen: dafuer muss man den Tab verlassen, und
+ *   auf dem Handy stirbt dabei der Socket. Der Raum steht weiter, wer
+ *   zurueckkommt, tritt einfach wieder ein. In der Raumliste taucht er nicht
+ *   auf, solange niemand drin sitzt – erreichbar ist er nur ueber Code und Link.
+ *
+ * SEAT_GRACE_MS – so lange bleibt ein *Platz* reserviert. Das braucht es nur
+ *   waehrend einer laufenden Partie, weil dort Punkte am Platz haengen. In der
+ *   Lobby haengt daran nichts, also wird der Platz sofort frei – ein Sitz, auf
+ *   dem sichtbar niemand sitzt, verwirrt nur.
+ *
+ * Gleiche Werte und gleiche Regel in allen vier Spielen.
  */
-const REJOIN_MS = 60_000;
+const ROOM_IDLE_MS = 5 * 60_000;
+const SEAT_GRACE_MS = 60_000;
 
 function durationFor(round) {
   return CONFIG.roundDurations[round - 1] ?? CONFIG.roundDurations[CONFIG.roundDurations.length - 1];
@@ -66,9 +77,25 @@ function createRoom(isPublic = true) {
     roundScores: new Map(),// pid -> Punkte dieser Runde
     submitted: new Set(),
     timer: null,
+    idleTimer: null,      // laeuft, solange niemand im Raum sitzt
   };
   rooms.set(room.id, room);
   return room;
+}
+
+/**
+ * Ein Raum, in dem niemand mehr sitzt, wird nicht sofort abgeraeumt – sonst
+ * waere er genau dann weg, wenn man gerade den Link verschickt.
+ */
+function scheduleIdleClose(room) {
+  if (room.idleTimer) clearTimeout(room.idleTimer);
+  room.idleTimer = setTimeout(() => {
+    if (room.players.size === 0) destroyRoom(room);
+  }, ROOM_IDLE_MS);
+}
+
+function cancelIdleClose(room) {
+  if (room.idleTimer) { clearTimeout(room.idleTimer); room.idleTimer = null; }
 }
 
 /** Der Raum heisst nach dem, der ihn aufgemacht hat. */
@@ -80,6 +107,7 @@ function roomName(room) {
 /** Raum abraeumen, sobald kein Platz mehr belegt ist. */
 function destroyRoom(room) {
   if (room.timer) { clearTimeout(room.timer); room.timer = null; }
+  if (room.idleTimer) { clearTimeout(room.idleTimer); room.idleTimer = null; }
   for (const p of room.players.values()) {
     if (p.dropTimer) clearTimeout(p.dropTimer);
   }
@@ -178,9 +206,15 @@ function resetRoomToLobby(room) {
   ensureHost(room);
 }
 
+/**
+ * Zwischen den Runden: es reicht, dass alle Anwesenden bereit sind. Hier wird
+ * bewusst nicht mehr auf minPlayers geprueft – wer als Einziger uebrig bleibt,
+ * soll die angefangene Partie zu Ende spielen und in die Bestenliste kommen.
+ * Zum *Starten* braucht es weiterhin zwei (siehe lobbyReady).
+ */
 function allReady(room) {
   const online = onlinePlayers(room);
-  return online.length >= CONFIG.minPlayers && online.every((p) => p.ready);
+  return online.length > 0 && online.every((p) => p.ready);
 }
 
 /**
@@ -275,6 +309,7 @@ io.on('connection', (socket) => {
   /** Gemeinsame Logik von Beitreten und Aufmachen. */
   function sitDown(room, name, cb) {
     const pid = myPid();
+    cancelIdleClose(room);
     const cleanName = String(name || '').trim().slice(0, 16) || 'Spieler';
     room.players.set(pid, {
       id: pid, name: cleanName, ready: false, online: true,
@@ -306,6 +341,8 @@ io.on('connection', (socket) => {
     // voll ist oder gerade gespielt wird.
     if (room.players.has(myPid())) return reattach(socket, room, cb);
 
+    // Ein Raum, in dem niemand mehr sitzt, faengt fuer den Naechsten von vorn an.
+    if (room.players.size === 0) resetRoomToLobby(room);
     if (room.status !== 'lobby') return cb({ error: 'In diesem Raum laeuft gerade ein Spiel.' });
     if (room.players.size >= CONFIG.maxPlayers) return cb({ error: 'Raum ist voll.' });
     if (socket.data.roomId) removeFromRoom(socket, myPid());
@@ -394,6 +431,7 @@ function reattach(socket, room, cb) {
   if (socket.data.roomId && socket.data.roomId !== room.id) {
     removeFromRoom(socket, socket.data.pid);
   }
+  cancelIdleClose(room);
   const p = room.players.get(socket.data.pid);
   if (p.dropTimer) { clearTimeout(p.dropTimer); p.dropTimer = null; }
   p.online = true;
@@ -418,8 +456,13 @@ function reattach(socket, room, cb) {
 }
 
 /**
- * Verbindung weg: Platz reservieren, nicht raeumen. Erst wenn die Karenzzeit
- * abgelaufen ist, wird der Platz wirklich frei.
+ * Verbindung weg. In der Lobby wird der Platz sofort frei – dort haengt nichts
+ * daran, und ein Sitz mit niemandem drauf verwirrt die anderen nur. Der Raum
+ * bleibt trotzdem offen (siehe scheduleIdleClose), wer zurueckkommt, tritt
+ * einfach wieder ein.
+ *
+ * Waehrend einer Partie ist das anders: da haengen Punkte am Platz, also bleibt
+ * er reserviert. Die Runde laeuft ohne den Abwesenden weiter.
  */
 function holdSeat(socket) {
   const room = rooms.get(socket.data.roomId);
@@ -429,12 +472,18 @@ function holdSeat(socket) {
   // Woanders schon wieder eingestiegen? Dann gehoert der Platz der neuen Verbindung.
   if (!p || p.socketId !== socket.id) return;
 
+  if (room.status === 'lobby') {
+    socket.data.roomId = null;
+    releasePlayer(room, pid);
+    return;
+  }
+
   p.online = false;
   p.ready = false;
   ensureHost(room);
 
   if (p.dropTimer) clearTimeout(p.dropTimer);
-  p.dropTimer = setTimeout(() => dropSeat(room, pid), REJOIN_MS);
+  p.dropTimer = setTimeout(() => dropSeat(room, pid), SEAT_GRACE_MS);
 
   // Laeuft ein Spiel, darf ein Abwesender die Runde nicht blockieren.
   if (room.status === 'playing') maybeFinishRound(room);
@@ -469,19 +518,18 @@ function releasePlayer(room, pid) {
   room.submitted.delete(pid);
 
   if (room.players.size === 0) {
-    destroyRoom(room);
+    // Niemand mehr da: der Raum bleibt eine Weile offen, faengt aber von vorn
+    // an. In der Raumliste steht er nicht – nur Code und Link fuehren hin.
+    resetRoomToLobby(room);
+    scheduleIdleClose(room);
     broadcastRooms();
     return;
   }
   ensureHost(room);
 
-  // Laeuft ein Spiel und es sind zu wenige Spieler uebrig -> zurueck in die Lobby
-  if (room.status !== 'lobby' && onlinePlayers(room).length < CONFIG.minPlayers) {
-    resetRoomToLobby(room);
-    io.to(room.id).emit('gameAborted', { reason: 'Zu wenige Spieler.' });
-  } else if (room.status === 'playing') {
-    maybeFinishRound(room);
-  }
+  // Kein Abbruch mehr, wenn zu wenige uebrig sind: wer bleibt, spielt die
+  // Partie zu Ende und kommt damit auch in die Bestenliste.
+  if (room.status === 'playing') maybeFinishRound(room);
   emitRoomState(room);
   broadcastRooms();
 }
