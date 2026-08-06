@@ -8,6 +8,10 @@ import { getLeaderboard, addLeaderboardEntry } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
+// Lokal 0.0.0.0, damit Mitspieler im WLAN direkt draufkommen. Hinter einem
+// Reverse Proxy gehoert HOST=127.0.0.1 gesetzt, sonst ist der Dienst unter
+// Umgehung von Apache auch ohne HTTPS erreichbar.
+const HOST = process.env.HOST || '0.0.0.0';
 
 const app = express();
 const server = http.createServer(app);
@@ -534,6 +538,6 @@ function releasePlayer(room, pid) {
   broadcastRooms();
 }
 
-server.listen(PORT, () => {
-  console.log(`PickUp laeuft auf http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`PickUp laeuft auf http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
 });
