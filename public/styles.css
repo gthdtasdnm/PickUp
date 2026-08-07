@@ -1,5 +1,5 @@
 /* ══════════════ Gemeinsame Lobby-Basis ══════════════ Anfang ═══════════════
-   Identisch in PickUp, Magic Towers, Reflex Royale und Double. Wer hier etwas
+   Identisch in Keep, Card Chaos, Lucky Reflex und Seconds. Wer hier etwas
    ändert, ändert es in allen vier – der Block wird von Hand synchron gehalten,
    es gibt bewusst keinen Build-Schritt.
 
@@ -28,7 +28,7 @@
 }
 
 /* Screens: beide Schaltklassen, damit jedes Spiel seinen bisherigen
-   Umschalter behalten kann (.on in Magic Towers, .active in den anderen). */
+   Umschalter behalten kann (.on in Card Chaos, .active in den anderen). */
 .screen.on, .screen.active, .view.active { display: flex; }
 
 /* ── Typo ─────────────────────────────────────────────────────────────── */
@@ -218,7 +218,7 @@ input:focus, select:focus {
 
 /* ══════════════ Gemeinsame Lobby-Basis ══════════════ Ende ═════════════════ */
 
-/* PickUp: eigener Akzent + Altnamen, die der Spielteil weiterbenutzt. */
+/* Keep: eigener Akzent + Altnamen, die der Spielteil weiterbenutzt. */
 :root {
   --akzent: var(--hot2);
   --akzent2: var(--gold);
@@ -288,7 +288,7 @@ h2 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
 .leaderboard li .lb-date { color: var(--muted); font-size: 12px; text-align: center; }
 .leaderboard li .pts { text-align: right; font-variant-numeric: tabular-nums; }
 
-/* Kurzmeldung unten – PickUp schaltet sie über .show. */
+/* Kurzmeldung unten – Keep schaltet sie über .show. */
 #toast {
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: max(20px, env(safe-area-inset-bottom));

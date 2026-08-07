@@ -1,7 +1,7 @@
 {
-  "name": "pickup-game",
+  "name": "keep-game",
   "version": "1.0.0",
-  "description": "PickUp - ein privates Slot-Kombinations-Spiel fuer 2-4 Spieler",
+  "description": "Keep - ein privates Slot-Kombinations-Spiel fuer 2-4 Spieler",
   "type": "module",
   "scripts": {
     "start": "node server/index.js",

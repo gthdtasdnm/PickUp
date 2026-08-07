@@ -1,5 +1,5 @@
 // ================================================================
-//  PickUp - Spiel-Kern: Symbole, Kombinationen, Scoring.
+//  Keep - Spiel-Kern: Symbole, Kombinationen, Scoring.
 //  Glücksspiel-Stil: große Zahlen, weite Streuung, Bonus für Extra-Symbole.
 //  Der Serien-/Multiplikator-Bonus wird in app.js oben draufgerechnet.
 // ================================================================

@@ -1,4 +1,4 @@
-# PickUp
+# Keep
 
 Ein privates Slot-Kombinations-Spiel für 2–4 Freunde. Inspiriert vom Prinzip
 „drehen, halten, kombinieren" – komplett eigener Code, eigene Grafik, eigenes Scoring.
@@ -71,13 +71,13 @@ Zum Testen mehrerer Spieler einfach mehrere Browser-Tabs/Geräte im selben Netz 
    ```
 2. **Projekt kopieren** (z.B. per scp/git) und Abhängigkeiten installieren:
    ```bash
-   cd /pfad/zu/PickUp
+   cd /pfad/zu/Keep
    npm install --omit=dev
    ```
 3. **Dauerhaft laufen lassen** mit PM2:
    ```bash
    sudo npm install -g pm2
-   pm2 start server/index.js --name pickup
+   pm2 start server/index.js --name keep
    pm2 save && pm2 startup   # Autostart nach Reboot
    ```
    Der Port lässt sich per Umgebungsvariable setzen: `PORT=8080 pm2 start ...`.

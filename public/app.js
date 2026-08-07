@@ -1,7 +1,7 @@
 import { SYMBOL_BY_ID, CATEGORIES, scoreCategory, randomSymbol } from './game-core.js';
 import { SYMBOL_SVG, SHAPE_SVG, SHAPE_COLOR } from './symbols.js';
 
-// Basis-Pfad der Seite: "/" lokal, "/pickup/" hinter dem Apache-Reverse-Proxy.
+// Basis-Pfad der Seite: "/" lokal, "/keep/" hinter dem Apache-Reverse-Proxy.
 // So funktioniert Socket.IO ohne feste Pfad-Annahme in beiden Fällen.
 const BASE = location.pathname.replace(/[^/]*$/, '');
 const socket = io({ path: BASE + 'socket.io' });
@@ -151,7 +151,7 @@ $('#closeLeaderboardBtn').addEventListener('click', () => show('screen-start'));
 
 $('#copyBtn').addEventListener('click', async () => {
   if (!state.roomId) return;
-  // Gegen document.baseURI gebaut: funktioniert unter /pickup/ hinter dem
+  // Gegen document.baseURI gebaut: funktioniert unter /keep/ hinter dem
   // Reverse Proxy genauso wie lokal auf localhost:3000.
   const link = new URL('#' + state.roomId, document.baseURI).href;
   try {
@@ -526,7 +526,7 @@ socket.on('gameAborted', ({ reason }) => {
 // ================================================================
 //  GETEILTER LINK
 // ================================================================
-// .../pickup/#AB3K – der Link ist die ganze Interaktion. Wer ihn öffnet, soll
+// .../keep/#AB3K – der Link ist die ganze Interaktion. Wer ihn öffnet, soll
 // im Raum landen und nicht auf einer Startseite, auf der er den Raum erst
 // suchen muss. Ist der Name schon bekannt, passiert das ohne einen Klick.
 const shared = (location.hash || '').replace('#', '').toUpperCase().trim();

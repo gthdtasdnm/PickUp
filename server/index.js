@@ -539,5 +539,5 @@ function releasePlayer(room, pid) {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`PickUp laeuft auf http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
+  console.log(`Keep laeuft auf http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
 });
