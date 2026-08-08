@@ -5,6 +5,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { getLeaderboard, addLeaderboardEntry } from './store.js';
+import {
+  absender,
+  darfRaumOeffnen,
+  darfVerbinden,
+  raumVermerkt,
+  verbindungAuf,
+  verbindungZu,
+} from './bremse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -19,6 +27,43 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Socket.IO reicht die Kopfzeilen als einfaches Objekt weiter, bremse.js
+// erwartet die Headers-Schnittstelle des Web-Standards. Der Adapter haelt das
+// Modul in allen vier Spielen wortgleich.
+const kopfzeilen = (h) => ({ get: (n) => h[String(n).toLowerCase()] ?? null });
+const ipAusRequest = (req) =>
+  absender({ headers: kopfzeilen(req.headers ?? {}) },
+           { remoteAddr: { hostname: req.socket?.remoteAddress } });
+
+// Die Bremse haengt an der Engine, nicht an der Socket.IO-Schicht. Grund: eine
+// Sitzung entsteht schon beim Handshake. Wer nur handshaked und den Connect nie
+// abschickt, laesst Sitzungen im Speicher liegen, ohne je in einer
+// Namespace-Middleware aufzutauchen - genau die billige Variante einer
+// Verbindungsflut.
+io.engine.use((req, res, next) => {
+  // Nur neue Sitzungen pruefen. Folgeabfragen einer laufenden Verbindung
+  // tragen eine sid und duerfen nicht gegen das Kontingent laufen.
+  const neueSitzung = !/[?&]sid=/.test(req.url ?? '');
+  if (!neueSitzung) return next();
+  if (darfVerbinden(ipAusRequest(req))) return next();
+  res.writeHead(429, { 'content-type': 'text/plain; charset=utf-8' });
+  res.end('Zu viele Verbindungen');
+});
+
+// Zaehlen im Takt der Engine-Verbindung: genau einmal auf, genau einmal zu.
+io.engine.on('connection', (rohSocket) => {
+  const ip = ipAusRequest(rohSocket.request);
+  rohSocket._ip = ip;
+  verbindungAuf(ip);
+  rohSocket.once('close', () => verbindungZu(ip));
+});
+
+// Die IP nur noch durchreichen - gezaehlt wird eine Ebene tiefer.
+io.use((socket, next) => {
+  socket.data.ip = socket.conn?._ip ?? ipAusRequest(socket.request);
+  next();
+});
 
 // -------------------- Spiel-Konfiguration --------------------
 const CONFIG = {
@@ -332,7 +377,11 @@ io.on('connection', (socket) => {
   }
 
   socket.on('createRoom', ({ name, isPublic } = {}, cb = () => {}) => {
+    if (!darfRaumOeffnen(socket.data.ip)) {
+      return cb({ error: 'Zu viele Raeume in kurzer Zeit. Warte kurz.' });
+    }
     if (socket.data.roomId) removeFromRoom(socket, myPid());
+    raumVermerkt(socket.data.ip);
     sitDown(createRoom(isPublic !== false), name, cb);
   });
 
