@@ -404,7 +404,7 @@ function renderStandings(target, list) {
     const li = document.createElement('li');
     const medal = ['🥇', '🥈', '🥉'][i] || (i + 1) + '.';
     li.innerHTML = `<span class="rank">${medal}</span>
-      <span class="nm">${p.name}${p.id === myId ? ' (du)' : ''}</span>
+      <span class="nm">${esc(p.name)}${p.id === myId ? ' (du)' : ''}</span>
       ${p.roundScore != null ? `<span class="delta">+${fmt(p.roundScore)}</span>` : ''}
       <span class="pts">${fmt(p.total)}</span>`;
     target.appendChild(li);
@@ -414,7 +414,7 @@ function renderResultsReady(rs) {
   const ul = $('#resultsReady'); ul.innerHTML = '';
   for (const p of rs.players) {
     const li = document.createElement('li');
-    li.innerHTML = `<span>${p.name}${p.id === myId ? ' (du)' : ''}</span>
+    li.innerHTML = `<span>${esc(p.name)}${p.id === myId ? ' (du)' : ''}</span>
       <span class="tag ${p.ready ? 'ready' : 'wait'}">${p.ready ? 'Bereit' : 'Wartet'}</span>`;
     ul.appendChild(li);
   }
@@ -432,7 +432,7 @@ function renderLeaderboard(target) {
     const li = document.createElement('li');
     const d = new Date(e.date);
     const ds = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
-    li.innerHTML = `<span>${i+1}. ${e.name}</span><span class="lb-date">${ds}</span><span class="pts">${fmt(e.score)}</span>`;
+    li.innerHTML = `<span>${i+1}. ${esc(e.name)}</span><span class="lb-date">${ds}</span><span class="pts">${fmt(e.score)}</span>`;
     target.appendChild(li);
   });
 }
